@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InterviewAI - Prepare for Success</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            900: '#0c4a6e',
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .view { display: none; }
+        .view.active { display: block; }
+        .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen">
+    <div id="app" class="max-w-4xl mx-auto px-4 py-8 md:py-12">
+        <!-- Header -->
+        <header class="flex items-center justify-between mb-12">
+            <div class="flex items-center gap-2">
+                <div class="bg-brand-600 p-2 rounded-xl text-white">
+                    <i data-lucide="mic" class="w-6 h-6"></i>
+                </div>
+                <h1 class="text-2xl font-bold tracking-tight text-brand-900">InterviewAI</h1>
+            </div>
+            <div id="status-badge" class="hidden sm:flex items-center gap-2 bg-white border border-slate-200 px-3 py-1 rounded-full text-xs font-medium text-slate-500">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                AI Readiness: Optimal
+            </div>
+        </header>
+
+        <!-- Dynamic Content Area -->
+        <main id="view-container">
+            <!-- Views will be injected here or toggled -->
+            
+            <!-- 1. Profile Setup View -->
+            <section id="profile-view" class="view active animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div class="bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-8 md:p-12 border border-slate-100">
+                    <div class="mb-8">
+                        <h2 class="text-3xl font-bold text-slate-900 mb-2">Build Your Profile</h2>
+                        <p class="text-slate-500">Tell us about your background so the AI can tailor your interview.</p>
+                    </div>
+                    
+                    <form id="profile-form" class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label class="text-sm font-semibold text-slate-700">Full Name</label>
+                                <input type="text" name="name" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" placeholder="Jane Doe">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm font-semibold text-slate-700">Email Address</label>
+                                <input type="email" name="email" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" placeholder="jane@example.com">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm font-semibold text-slate-700">Field of Study</label>
+                                <input type="text" name="field" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" placeholder="Computer Science">
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-sm font-semibold text-slate-700">Relevant Skills</label>
+                                <input type="text" name="skills" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" placeholder="Python, React, Project Management">
+                            </div>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-semibold text-slate-700">Key Courses Taken</label>
+                            <textarea name="courses" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all min-h-[100px]" placeholder="Algorithms, Database Systems, UI/UX Design..."></textarea>
+                        </div>
+                        
+                        <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 group">
+                            Next: Job Details
+                            <i data-lucide="arrow-right" class="w-5 h-5 group-hover:translate-x-1 transition-transform"></i>
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- 2. Job Context View -->
+            <section id="job-view" class="view animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div class="bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-8 md:p-12 border border-slate-100">
+                    <div class="mb-8">
+                        <button onclick="app.showPage('profile-view')" class="text-slate-400 hover:text-brand-600 flex items-center gap-1 text-sm font-medium mb-4 transition-colors">
+                            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                            Back to Profile
+                        </button>
+                        <h2 class="text-3xl font-bold text-slate-900 mb-2">What's the Role?</h2>
+                        <p class="text-slate-500">Paste the job description or a link to help the AI simulate the right interview.</p>
+                    </div>
+                    
+                    <form id="job-form" class="space-y-6">
+                        <div class="space-y-2">
+                            <label class="text-sm font-semibold text-slate-700">Job Description</label>
+                            <textarea name="description" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all min-h-[200px]" placeholder="Requirements, responsibilities, and company values..."></textarea>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-sm font-semibold text-slate-700">Job Posting Link (Optional)</label>
+                            <input type="url" name="link" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all" placeholder="https://linkedin.com/jobs/...">
+                        </div>
+                        
+                        <button type="submit" class="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-4 rounded-xl transition-all shadow-lg shadow-brand-500/25 flex items-center justify-center gap-2 group">
+                            Start Interview Simulation
+                            <i data-lucide="sparkles" class="w-5 h-5"></i>
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- 3. Interview View -->
+            <section id="interview-view" class="view animate-in fade-in duration-700">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <!-- Interviewer & Main Interaction -->
+                    <div class="lg:col-span-2 space-y-8">
+                        <div class="bg-white rounded-3xl shadow-xl p-8 border border-slate-100 flex flex-col items-center justify-center text-center min-h-[400px] relative overflow-hidden">
+                            <!-- Background Decor -->
+                            <div class="absolute inset-0 bg-brand-50/50 pointer-events-none"></div>
+                            
+                            <!-- AI Avatar Visual -->
+                            <div id="ai-visual" class="relative z-10 mb-8">
+                                <div class="w-32 h-32 bg-brand-100 rounded-full flex items-center justify-center relative">
+                                    <div class="absolute inset-0 bg-brand-400 rounded-full animate-ping opacity-20"></div>
+                                    <i data-lucide="bot" class="w-16 h-16 text-brand-600"></i>
+                                </div>
+                            </div>
+                            
+                            <div class="relative z-10 w-full max-w-lg">
+                                <h3 id="interviewer-status" class="text-brand-600 font-bold uppercase tracking-wider text-xs mb-4">Interviewer Speaking...</h3>
+                                <p id="question-text" class="text-xl md:text-2xl font-semibold text-slate-800 leading-relaxed mb-12">
+                                    "Welcome! To start, could you tell me a bit about your experience with Python in your recent projects?"
+                                </p>
+                                
+                                <div id="user-response-container" class="space-y-4">
+                                    <div id="listening-indicator" class="hidden flex flex-col items-center gap-4">
+                                        <div class="flex gap-1 items-center justify-center h-8">
+                                            <span class="w-1.5 h-4 bg-brand-500 rounded-full animate-bounce"></span>
+                                            <span class="w-1.5 h-8 bg-brand-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                                            <span class="w-1.5 h-12 bg-brand-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                                            <span class="w-1.5 h-8 bg-brand-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                                            <span class="w-1.5 h-4 bg-brand-500 rounded-full animate-bounce"></span>
+                                        </div>
+                                        <p class="text-sm font-bold text-slate-400 uppercase tracking-widest">Listening to you...</p>
+                                    </div>
+                                    
+                                    <div id="transcript-preview" class="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-slate-500 italic text-sm min-h-[60px] hidden">
+                                        Your response will appear here...
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Control Buttons -->
+                        <div class="flex items-center justify-between">
+                            <button id="end-interview-btn" class="px-6 py-3 text-slate-500 hover:text-red-500 font-bold transition-colors flex items-center gap-2">
+                                <i data-lucide="x-circle" class="w-5 h-5"></i>
+                                End Interview
+                            </button>
+                            <div class="flex gap-4">
+                                <button id="mic-toggle-btn" class="w-14 h-14 bg-brand-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-brand-700 transition-all">
+                                    <i data-lucide="mic" class="w-6 h-6"></i>
+                                </button>
+                                <button id="next-question-btn" class="px-8 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-all shadow-lg flex items-center gap-2">
+                                    Next Question
+                                    <i data-lucide="chevron-right" class="w-5 h-5"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Progress & Session Info -->
+                    <div class="space-y-6">
+                        <div class="bg-white rounded-3xl shadow-xl p-6 border border-slate-100">
+                            <h4 class="font-bold text-slate-800 mb-6 flex items-center gap-2">
+                                <i data-lucide="activity" class="w-5 h-5 text-brand-500"></i>
+                                Session Metrics
+                            </h4>
+                            <div class="space-y-6">
+                                <div>
+                                    <div class="flex justify-between text-xs font-bold text-slate-400 uppercase mb-2">
+                                        <span>Progress</span>
+                                        <span id="progress-val">1 / 5</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div id="progress-bar" class="w-1/5 h-full bg-brand-500 transition-all duration-500"></div>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="bg-slate-50 p-4 rounded-2xl">
+                                        <span class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Duration</span>
+                                        <span id="timer" class="text-xl font-bold text-slate-700">02:14</span>
+                                    </div>
+                                    <div class="bg-slate-50 p-4 rounded-2xl">
+                                        <span class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Clarity</span>
+                                        <span class="text-xl font-bold text-green-500">Good</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-brand-900 text-white rounded-3xl shadow-xl p-6 overflow-hidden relative">
+                            <div class="absolute -right-4 -bottom-4 opacity-10">
+                                <i data-lucide="lightbulb" class="w-32 h-32"></i>
+                            </div>
+                            <h4 class="font-bold mb-3">Interview Tip</h4>
+                            <p class="text-brand-100 text-sm leading-relaxed">
+                                Use the <span class="text-white font-bold">STAR method</span> (Situation, Task, Action, Result) to structure your behavioral answers.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. Feedback View -->
+            <section id="feedback-view" class="view animate-in fade-in duration-700">
+                <div class="bg-white rounded-3xl shadow-xl p-8 md:p-12 border border-slate-100">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
+                        <div>
+                            <h2 class="text-3xl font-bold text-slate-900 mb-2">Interview Analysis</h2>
+                            <p class="text-slate-500">Great job! Here's how you performed in this simulation.</p>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <button onclick="window.print()" class="p-3 bg-slate-50 text-slate-600 rounded-xl hover:bg-slate-100 transition-colors">
+                                <i data-lucide="download" class="w-5 h-5"></i>
+                            </button>
+                            <button onclick="location.reload()" class="px-6 py-3 bg-brand-600 text-white rounded-xl font-bold hover:bg-brand-700 transition-all shadow-lg shadow-brand-500/25">
+                                Try Another Role
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+                        <!-- Score Cards -->
+                        <div class="bg-slate-50 p-6 rounded-3xl border border-slate-100 text-center">
+                            <div class="text-xs font-bold text-slate-400 uppercase mb-4">Content Depth</div>
+                            <div class="text-4xl font-bold text-brand-600 mb-2">84%</div>
+                            <p class="text-xs text-slate-500">Excellent technical detail</p>
+                        </div>
+                        <div class="bg-slate-50 p-6 rounded-3xl border border-slate-100 text-center">
+                            <div class="text-xs font-bold text-slate-400 uppercase mb-4">Clarity & Flow</div>
+                            <div class="text-4xl font-bold text-green-500 mb-2">92%</div>
+                            <p class="text-xs text-slate-500">Very easy to follow</p>
+                        </div>
+                        <div class="bg-slate-50 p-6 rounded-3xl border border-slate-100 text-center">
+                            <div class="text-xs font-bold text-slate-400 uppercase mb-4">Role Relevance</div>
+                            <div class="text-4xl font-bold text-amber-500 mb-2">78%</div>
+                            <p class="text-xs text-slate-500">Target company values more</p>
+                        </div>
+                    </div>
+                    
+                    <div class="space-y-8">
+                        <div>
+                            <h3 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                <i data-lucide="check-circle" class="text-green-500"></i>
+                                Key Strengths
+                            </h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="p-4 bg-green-50 border border-green-100 rounded-2xl text-sm text-green-700">
+                                    <span class="font-bold block mb-1">Course Application</span>
+                                    Effectively bridged theoretical knowledge from your "Database Systems" course to practical scenarios.
+                                </div>
+                                <div class="p-4 bg-green-50 border border-green-100 rounded-2xl text-sm text-green-700">
+                                    <span class="font-bold block mb-1">Confidence</span>
+                                    Maintained a steady pace and professional tone throughout the interaction.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <h3 class="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                <i data-lucide="trending-up" class="text-brand-500"></i>
+                                Recommended Next Step
+                            </h3>
+                            <div id="next-task-card" class="bg-brand-900 text-white p-8 rounded-3xl relative overflow-hidden">
+                                <div class="relative z-10">
+                                    <div class="inline-block px-3 py-1 bg-brand-700 rounded-full text-[10px] font-bold uppercase tracking-widest mb-4">Practical Task</div>
+                                    <h4 id="task-title" class="text-2xl font-bold mb-4">Coding Challenge: Array Manipulation</h4>
+                                    <p id="task-desc" class="text-brand-100 mb-8 max-w-xl">
+                                        Based on the job description, we recommend practicing your Python skills. Solve this task: "Write a function to find the longest substring without repeating characters."
+                                    </p>
+                                    <button class="bg-white text-brand-900 px-8 py-3 rounded-xl font-bold hover:bg-brand-50 transition-colors flex items-center gap-2">
+                                        Start Task
+                                        <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+                                    </button>
+                                </div>
+                                <i data-lucide="code" class="absolute -right-8 -bottom-8 w-48 h-48 text-white opacity-5 rotate-12"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="mt-12 text-center text-slate-400 text-sm">
+            &copy; 2026 InterviewAI • Built for Career Growth
+        </footer>
+    </div>
+
+    <!-- Application Logic -->
+    <script src="app.js"></script>
+</body>
+</html>
