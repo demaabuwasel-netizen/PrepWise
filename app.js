@@ -233,11 +233,9 @@ window.app = {
         const cvText = (document.getElementById('cv-text-input') || {}).value || '';
         if (!cvText.trim()) return;
         const parsed = this.parseCVText(cvText);
-        const nameEl = document.getElementById('name-input');
         const skillsEl = document.getElementById('skills-input');
         const coursesEl = document.getElementById('courses-input');
         const fieldEl = document.getElementById('field-select');
-        if (parsed.name && nameEl) nameEl.value = parsed.name;
         if (parsed.skills && skillsEl) skillsEl.value = parsed.skills;
         if (parsed.courses && coursesEl) coursesEl.value = parsed.courses;
         if (parsed.field && fieldEl) fieldEl.value = parsed.field;
@@ -252,52 +250,37 @@ window.app = {
         const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
         const result = { name: '', skills: '', courses: '', field: '' };
 
-        // Extract name - multiple strategies
-        const nameMatch = text.match(/^([A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/m);
-        if (nameMatch) result.name = nameMatch[1];
-        if (!result.name) {
-            const namePat = /^([A-Z][a-z]+)(\s[A-Z][a-z]+){1,3}$/;
-            const candidate = lines.find(l => namePat.test(l) && !/\d|@|http|www/.test(l));
-            if (candidate) result.name = candidate;
-        }
-        const skillsHeaderIdx = lines.findIndex(l => /^(technical\s+)?skills|core\s+competencies/i.test(l));
-        if (skillsHeaderIdx !== -1) {
-            const skillLines = [];
-            for (let i = skillsHeaderIdx + 1; i < lines.length && i < skillsHeaderIdx + 6; i++) {
-                if (/^[A-Z][A-Z\s]{4,}$/.test(lines[i])) break;
-                skillLines.push(lines[i]);
-            }
-            result.skills = skillLines.join(', ').split(/[,|•·;\/]/).map(s => s.trim()).filter(s => s.length > 1 && s.length < 30).slice(0, 10).join(', ');
-        }
-        if (!result.skills) {
-            const TECH_TERMS = ['Python', 'JavaScript', 'TypeScript', 'Java', 'C++', 'C#', 'Go', 'Rust', 'Swift', 'Kotlin', 'React', 'Vue', 'Angular', 'Node.js', 'Django', 'Flask', 'Spring', 'SQL', 'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'AWS', 'GCP', 'Azure', 'Docker', 'Kubernetes', 'Git', 'REST', 'GraphQL', 'TensorFlow', 'PyTorch', 'Pandas', 'NumPy', 'Figma', 'Agile', 'Scrum', 'Linux', 'Excel', 'R', 'machine learning', 'deep learning', 'data analysis', 'DevOps', 'CI/CD'];
-            const textLower = text.toLowerCase();
-            const found = TECH_TERMS.filter(t => textLower.includes(t.toLowerCase()));
-            result.skills = found.slice(0, 10).join(', ');
+        // Extract skills - look for skills section and grab items properly
+        const skillsPattern = /skills\s*:?\s*\n([\s\S]*?)(?:\n\n|$|\n[A-Z][a-z]+\s*:|\n[A-Z][a-z]+\s*\/)/i;
+        const skillsMatch = text.match(skillsPattern);
+        if (skillsMatch) {
+            const skillsText = skillsMatch[1];
+            const skillItems = skillsText.split(/[,•·;\n]/).map(s => s.trim()).filter(s => s.length > 2 && s.length < 40 && !/^[A-Z\s]+$/.test(s) && !/^\d+/.test(s));
+            result.skills = skillItems.slice(0, 12).join(', ');
         }
 
-        // Extract coursework/relevant courses
-        const courseworkIdx = lines.findIndex(l => /^(relevant\s+)?coursework|relevant\s+courses|courses\s+taken|education|degree/i.test(l));
-        if (courseworkIdx !== -1) {
-            const courseLines = [];
-            for (let i = courseworkIdx + 1; i < lines.length && i < courseworkIdx + 5; i++) {
-                if (/^[A-Z][A-Z\s]{4,}$/.test(lines[i]) || /^(skills|experience|projects)/i.test(lines[i])) break;
-                courseLines.push(lines[i]);
-            }
-            result.courses = courseLines.join(', ').split(/[,•;]/).map(s => s.trim()).filter(s => s.length > 2).slice(0, 5).join(', ');
+        // Extract courses - look for coursework section
+        const coursesPattern = /(?:relevant\s+)?coursework|relevant\s+courses|courses?\s+taken|education|academic\s+courses\s*:?\s*\n([\s\S]*?)(?:\n\n|$|\n[A-Z][a-z]+\s*:|\n[A-Z][a-z]+\s*\/)/i;
+        const coursesMatch = text.match(coursesPattern);
+        if (coursesMatch) {
+            const coursesText = coursesMatch[1];
+            const courseItems = coursesText.split(/[,•;\n]/).map(s => s.trim()).filter(s => s.length > 3 && s.length < 50 && !/^[A-Z\s]+$/.test(s) && !/^\d+/.test(s));
+            result.courses = courseItems.slice(0, 8).join(', ');
         }
-        const FIELD_MAP = [
-            { keywords: ['machine learning', 'deep learning', 'neural network', 'nlp', 'computer vision'], field: 'Artificial Intelligence' },
-            { keywords: ['data science', 'data analyst', 'pandas', 'numpy', 'tableau', 'power bi'], field: 'Data Science' },
-            { keywords: ['software engineer', 'backend', 'frontend', 'fullstack', 'web developer', 'mobile developer'], field: 'Software Engineering' },
-            { keywords: ['cybersecurity', 'penetration testing', 'soc analyst', 'ethical hacking', 'infosec'], field: 'Cybersecurity' },
-            { keywords: ['cloud', 'devops', 'kubernetes', 'terraform', 'ci/cd', 'infrastructure'], field: 'Cloud / DevOps' },
-            { keywords: ['ux', 'user experience', 'user research', 'usability', 'wireframe', 'figma'], field: 'UX Research' },
-            { keywords: ['finance', 'investment', 'portfolio', 'equity', 'accounting', 'cfa'], field: 'Finance' },
-            { keywords: ['marketing', 'seo', 'campaigns', 'brand', 'content strategy', 'digital marketing'], field: 'Digital Marketing' },
-            { keywords: ['product manager', 'product management', 'roadmap', 'stakeholder', 'go-to-market'], field: 'Business Administration' },
-        ];
+
+        // Detect field from content
         const textLower = text.toLowerCase();
+        const FIELD_MAP = [
+            { keywords: ['machine learning', 'deep learning', 'neural', 'nlp', 'computer vision', 'tensorflow', 'pytorch'], field: 'Artificial Intelligence' },
+            { keywords: ['data science', 'data analyst', 'pandas', 'numpy', 'tableau', 'power bi'], field: 'Data Science' },
+            { keywords: ['software engineer', 'backend', 'frontend', 'fullstack', 'web developer', 'mobile'], field: 'Software Engineering' },
+            { keywords: ['cybersecurity', 'penetration', 'ethical hack', 'infosec', 'security analyst'], field: 'Cybersecurity' },
+            { keywords: ['devops', 'kubernetes', 'terraform', 'ci/cd', 'infrastructure', 'cloud engineer'], field: 'Cloud / DevOps' },
+            { keywords: ['ux ', 'ui ', 'user experience', 'user research', 'usability', 'figma'], field: 'UX Research' },
+            { keywords: ['finance', 'investment', 'portfolio', 'equity', 'accounting'], field: 'Finance' },
+            { keywords: ['marketing', 'seo', 'campaigns', 'brand', 'content', 'digital marketing'], field: 'Digital Marketing' },
+            { keywords: ['product manager', 'product management', 'roadmap', 'go-to-market'], field: 'Business Administration' },
+        ];
         for (const { keywords, field } of FIELD_MAP) {
             if (keywords.some(k => textLower.includes(k))) {
                 result.field = field;
@@ -490,9 +473,9 @@ window.app = {
     },
 
     extractJobKeywords(jobDesc) {
-        const techSkills = ['python', 'javascript', 'java', 'sql', 'react', 'node', 'aws', 'docker', 'kubernetes', 'typescript', 'c++', 'go', 'rust', 'scala', 'spring', 'django', 'flask', 'angular', 'vue', 'backend', 'frontend', 'fullstack', 'devops', 'cloud', 'api', 'rest', 'graphql', 'microservices', 'databases', 'mongodb', 'postgres', 'mysql', 'redis', 'elasticsearch', 'machine learning', 'data analysis', 'analytics', 'ai', 'gcp', 'azure'];
-        const softSkills = ['communication', 'leadership', 'teamwork', 'collaboration', 'problem solving', 'critical thinking', 'project management', 'agile', 'scrum', 'stakeholder management', 'mentoring', 'mentorship', 'presentation', 'negotiation', 'strategic thinking', 'analytical'];
-        const responsibilities = ['design', 'architect', 'develop', 'build', 'implement', 'debug', 'test', 'optimize', 'analyze', 'research', 'manage', 'lead', 'mentor', 'review', 'document'];
+        const techSkills = ['python', 'javascript', 'java', 'sql', 'react', 'node.js', 'node', 'aws', 'docker', 'kubernetes', 'typescript', 'c++', 'go', 'rust', 'scala', 'spring', 'django', 'flask', 'angular', 'vue', 'backend', 'frontend', 'fullstack', 'devops', 'cloud', 'api', 'rest', 'graphql', 'microservices', 'databases', 'mongodb', 'postgres', 'postgresql', 'mysql', 'redis', 'elasticsearch', 'machine learning', 'data analysis', 'analytics', 'ai', 'gcp', 'azure', 'terraform', 'jenkins', 'git', 'html', 'css'];
+        const softSkills = ['communication', 'leadership', 'teamwork', 'collaboration', 'problem solving', 'critical thinking', 'project management', 'agile', 'scrum', 'stakeholder', 'mentoring', 'presentation', 'negotiation', 'strategic', 'organizational'];
+        const responsibilities = ['design', 'architect', 'develop', 'build', 'implement', 'debug', 'test', 'optimize', 'analyze', 'research', 'manage', 'lead', 'mentor', 'review', 'document', 'maintain', 'improve', 'create'];
 
         const found = { tech: [], soft: [], responsibilities: [] };
 
@@ -506,51 +489,73 @@ window.app = {
     calculateMatchScore(jobKeywords, userSkillsList, userField, jobDesc) {
         let score = 50;
         const userSkillsLower = userSkillsList.map(s => s.toLowerCase());
+        const jobDescLower = jobDesc.toLowerCase();
 
-        // Score technical skill matches
-        jobKeywords.tech.forEach(skill => {
-            if (userSkillsLower.some(us => us.includes(skill) || skill.includes(us.split(' ')[0]))) {
-                score += 8;
-            }
-        });
+        // Count how many job tech skills user has
+        const userHasTechSkills = jobKeywords.tech.filter(skill =>
+            userSkillsLower.some(us => us.includes(skill) || skill.includes(us.split(' ')[0]))
+        ).length;
 
-        // Score soft skill matches
-        jobKeywords.soft.forEach(skill => {
-            if (userSkillsLower.some(us => us.includes(skill.split(' ')[0])) || jobDesc.includes('experience')) {
-                score += 5;
-            }
-        });
+        // More sophisticated tech skill matching
+        const techCoverage = jobKeywords.tech.length > 0 ? (userHasTechSkills / jobKeywords.tech.length) : 0;
+        if (techCoverage > 0.8) score += 25;
+        else if (techCoverage > 0.6) score += 18;
+        else if (techCoverage > 0.4) score += 12;
+        else if (techCoverage > 0.2) score += 6;
+        else if (techCoverage > 0) score += 2;
 
-        // Field relevance bonus
-        if (userField.includes('software') || userField.includes('computer') || userField.includes('engineering')) {
-            if (jobDesc.includes('engineer') || jobDesc.includes('developer') || jobDesc.includes('software')) {
-                score += 10;
-            }
+        // Soft skills - more lenient, assume people have communication
+        const userHasSoftSkills = jobKeywords.soft.filter(skill =>
+            userSkillsLower.some(us => us.toLowerCase().includes(skill.split(' ')[0].toLowerCase()))
+        ).length;
+        const softCoverage = jobKeywords.soft.length > 0 ? (userHasSoftSkills / Math.min(jobKeywords.soft.length, 3)) : 0;
+        if (softCoverage > 0.5) score += 5;
+
+        // Field relevance - important bonus
+        const fieldMatch = userField.toLowerCase();
+        if ((fieldMatch.includes('software') || fieldMatch.includes('computer') || fieldMatch.includes('engineering') || fieldMatch.includes('data')) &&
+            (jobDescLower.includes('engineer') || jobDescLower.includes('developer') || jobDescLower.includes('scientist') || jobDescLower.includes('analyst'))) {
+            score += 15;
         }
 
-        // Penalize if major tech stack mismatch
-        if (jobKeywords.tech.length > 0 && !userSkillsLower.some(s => jobKeywords.tech[0].includes(s) || s.includes(jobKeywords.tech[0].split(' ')[0]))) {
-            score -= 15;
+        // Years of experience check
+        const expMatch = jobDesc.match(/(\d+)\+?\s*(years?|yrs)/i);
+        if (expMatch) {
+            const reqYears = parseInt(expMatch[1]);
+            if (reqYears <= 3) score += 5;
+            else if (reqYears <= 5) score += 3;
         }
 
-        return Math.max(40, Math.min(95, score));
+        return Math.max(35, Math.min(95, score));
     },
 
     identifySkillGaps(jobKeywords, userSkillsList) {
         const userSkillsLower = userSkillsList.map(s => s.toLowerCase());
         const gaps = [];
 
-        jobKeywords.tech.slice(0, 5).forEach(skill => {
-            if (!userSkillsLower.some(us => us.includes(skill) || skill.includes(us.split(' ')[0]))) {
-                gaps.push(skill.charAt(0).toUpperCase() + skill.slice(1));
-            }
+        // Identify most important missing tech skills (first 3-4 mentioned in job desc)
+        const missingTechSkills = jobKeywords.tech.filter(skill =>
+            !userSkillsLower.some(us => us.includes(skill) || skill.includes(us.split(' ')[0]))
+        );
+
+        // Prioritize by frequency in job description (more important = more mentioned)
+        // Add top missing tech skills
+        missingTechSkills.slice(0, 2).forEach(skill => {
+            const formatted = skill.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+            if (!gaps.includes(formatted)) gaps.push(formatted);
         });
 
-        jobKeywords.soft.slice(0, 3).forEach(skill => {
-            if (!userSkillsLower.some(us => us.toLowerCase().includes(skill.split(' ')[0]))) {
-                gaps.push(skill.charAt(0).toUpperCase() + skill.slice(1) + ' Skills');
-            }
-        });
+        // Add missing soft skills if very few matches
+        const missingSoftSkills = jobKeywords.soft.filter(skill =>
+            !userSkillsLower.some(us => us.toLowerCase().includes(skill.split(' ')[0]))
+        );
+
+        if (missingSoftSkills.length > 0 && gaps.length < 3) {
+            missingSoftSkills.slice(0, 1).forEach(skill => {
+                const formatted = skill.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                if (!gaps.includes(formatted)) gaps.push(formatted);
+            });
+        }
 
         return gaps.slice(0, 3);
     },
