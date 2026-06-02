@@ -235,9 +235,11 @@ window.app = {
         const parsed = this.parseCVText(cvText);
         const nameEl = document.getElementById('name-input');
         const skillsEl = document.getElementById('skills-input');
+        const coursesEl = document.getElementById('courses-input');
         const fieldEl = document.getElementById('field-select');
         if (parsed.name && nameEl) nameEl.value = parsed.name;
         if (parsed.skills && skillsEl) skillsEl.value = parsed.skills;
+        if (parsed.courses && coursesEl) coursesEl.value = parsed.courses;
         if (parsed.field && fieldEl) fieldEl.value = parsed.field;
         const status = document.getElementById('cv-import-status');
         if (status) {
@@ -248,10 +250,16 @@ window.app = {
 
     parseCVText(text) {
         const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-        const result = { name: '', skills: '', field: '' };
-        const namePat = /^([A-Z][a-z]+)(\s[A-Z][a-z]+){1,3}$/;
-        const candidate = lines.find(l => namePat.test(l) && !/\d|@|http|www/.test(l));
-        if (candidate) result.name = candidate;
+        const result = { name: '', skills: '', courses: '', field: '' };
+
+        // Extract name - multiple strategies
+        const nameMatch = text.match(/^([A-Z][a-z]+ [A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/m);
+        if (nameMatch) result.name = nameMatch[1];
+        if (!result.name) {
+            const namePat = /^([A-Z][a-z]+)(\s[A-Z][a-z]+){1,3}$/;
+            const candidate = lines.find(l => namePat.test(l) && !/\d|@|http|www/.test(l));
+            if (candidate) result.name = candidate;
+        }
         const skillsHeaderIdx = lines.findIndex(l => /^(technical\s+)?skills|core\s+competencies/i.test(l));
         if (skillsHeaderIdx !== -1) {
             const skillLines = [];
@@ -266,6 +274,17 @@ window.app = {
             const textLower = text.toLowerCase();
             const found = TECH_TERMS.filter(t => textLower.includes(t.toLowerCase()));
             result.skills = found.slice(0, 10).join(', ');
+        }
+
+        // Extract coursework/relevant courses
+        const courseworkIdx = lines.findIndex(l => /^(relevant\s+)?coursework|relevant\s+courses|courses\s+taken|education|degree/i.test(l));
+        if (courseworkIdx !== -1) {
+            const courseLines = [];
+            for (let i = courseworkIdx + 1; i < lines.length && i < courseworkIdx + 5; i++) {
+                if (/^[A-Z][A-Z\s]{4,}$/.test(lines[i]) || /^(skills|experience|projects)/i.test(lines[i])) break;
+                courseLines.push(lines[i]);
+            }
+            result.courses = courseLines.join(', ').split(/[,•;]/).map(s => s.trim()).filter(s => s.length > 2).slice(0, 5).join(', ');
         }
         const FIELD_MAP = [
             { keywords: ['machine learning', 'deep learning', 'neural network', 'nlp', 'computer vision'], field: 'Artificial Intelligence' },
@@ -670,10 +689,14 @@ window.app = {
         if (this.state.interview.currentQuestionIndex < 6) {
             const ack = this.generateAIAcknowledgment(answer);
             this.showAIBridge(ack, () => {
-                if (ack.injectAsNextQuestion) {
-                    this.state.interview.questions.push(ack.followUpQuestion);
-                } else {
-                    this.generateNeuralFollowUp();
+                // Only generate next question if we don't already have one
+                const nextIdx = this.state.interview.currentQuestionIndex;
+                if (nextIdx >= this.state.interview.questions.length) {
+                    if (ack.injectAsNextQuestion) {
+                        this.state.interview.questions.push(ack.followUpQuestion);
+                    } else {
+                        this.generateNeuralFollowUp();
+                    }
                 }
                 this.askQuestion();
             });
@@ -689,14 +712,13 @@ window.app = {
         const words = answer.trim().split(/\s+/).length;
         const hasExample = /(I |my |we |project|when |worked on|built|led |created|solved|implemented|experience)/i.test(answer);
         const hasResult = /(result|outcome|achieved|improved|increased|reduced|saved|learned|realized|impact)/i.test(answer);
-        const hasDetail = words > 30 && hasExample;
 
-        // Very short answer — inject a clarifying follow-up as the next question
+        // Very short answer — inject a clarifying follow-up
         if (words < 12) {
             const followUps = [
-                "That's a start. Could you walk me through a specific situation where you applied that?",
-                "I'd like to understand better — can you give me a concrete example from your experience?",
-                "Interesting. What was the context behind that, and what actions did you take?"
+                "Could you walk me through a specific example of that?",
+                "I'd like to hear more — can you give me a concrete situation?",
+                "What's a real example from your experience where that came up?"
             ];
             return {
                 text: `I want to dig a little deeper on that${name ? `, ${name}` : ''}.`,
@@ -706,24 +728,24 @@ window.app = {
             };
         }
 
-        // Has content but missing results — bridge to the next question
+        // Has example but missing results — ask about outcome
         if (hasExample && !hasResult) {
             const bridges = [
-                `Good context${name ? `, ${name}` : ''}. I noticed you described the situation — what was the actual outcome or impact?`,
-                "That's a solid example. I'm curious — what did you learn from that, and what would you do differently?",
-                `Strong narrative. Let's keep going.`
+                "That's helpful context. But what actually happened — what was the result?",
+                "Good example. I'm curious about the outcome — what changed or improved?",
+                "I see the situation. What was the impact of your actions?"
             ];
             const text = bridges[Math.floor(Math.random() * bridges.length)];
             return { text, injectAsNextQuestion: false, type: 'bridge' };
         }
 
-        // Good detailed answer — acknowledge and move forward
+        // Good detailed answer — acknowledge genuinely and move on
         const acks = [
-            `That's a well-structured response${name ? `, ${name}` : ''}. Let's continue.`,
-            "Clear and specific — exactly what interviewers want to hear. Moving on.",
-            `Good. I can see you've thought this through. Next question.`,
-            "Thank you for that detail. I'm getting a strong picture of your approach.",
-            `Noted. That tells me a lot about how you think. Let me ask you something different.`
+            "That's really clear. I can see you have solid experience there.",
+            "Solid — you've clearly thought about this.",
+            "Good answer. That tells me something important about how you approach things.",
+            "I like that. Shows real depth.",
+            `That's well said${name ? `, ${name}` : ''}. Moving on.`
         ];
         return {
             text: acks[Math.floor(Math.random() * acks.length)],
@@ -763,44 +785,45 @@ window.app = {
         const idx = this.state.interview.currentQuestionIndex;
         const mode = this.state.interviewMode;
         const name = this.state.user.name ? this.state.user.name.split(' ')[0] : 'there';
+        const prevAnswer = idx > 0 ? (this.state.interview.responses[idx - 1]?.answer || '') : '';
         const structure = {
             1: {
-                hr: `Great. What specifically drew you to this kind of role, ${name}? Was it a particular experience or goal?`,
-                technical: `Given your background in ${this.state.user.field}, what technical challenge excites you most about this position?`,
+                hr: `Interesting. You mentioned ${prevAnswer.substring(0, 30).toLowerCase().includes('experi') ? 'experience' : 'that'}. What specifically drew you to this kind of role, ${name}?`,
+                technical: `Great foundation. Given your background in ${this.state.user.field}, what technical challenge excites you most about this position?`,
                 case: `From a strategic lens — why are you interested in tackling the specific challenges this role involves?`,
-                rapid: `Quick one: in 20 seconds, what is the single biggest motivation behind your application?`,
-                friendly: `I'd love to know — what was the "spark" moment that made you pursue ${this.state.user.field}?`
+                rapid: `Quick one: in 20 seconds, what's your biggest motivation here?`,
+                friendly: `That's great context. What was the "spark" moment for you in ${this.state.user.field}?`
             },
             2: {
-                hr: "Describe a situation where you had to collaborate with a difficult teammate. How did you ensure the project succeeded?",
-                technical: "Tell me about a time you had to explain a complex technical concept to a non-technical stakeholder.",
-                case: "Walk me through a time you had to convince a skeptical stakeholder to support a data-driven recommendation.",
-                rapid: "Team conflict: do you prioritize the relationship or the deadline? Give me a real example.",
-                friendly: "Could you tell me about a time you helped a teammate through a genuinely tough situation?"
+                hr: "Now let's talk about teamwork. Describe a situation where you had to collaborate with someone challenging. How did you make it work?",
+                technical: "Tell me about a time you had to explain something technical to a non-technical person. How did you approach it?",
+                case: "Walk me through a time you had to convince someone skeptical. What was your approach?",
+                rapid: "Team conflict: relationship or deadline? Real example?",
+                friendly: "Tell me about a time you really helped a teammate. What did you do?"
             },
             3: {
-                hr: `The role requires ${this.state.analysis.gaps[0] || 'adaptability under pressure'}. Describe a moment you demonstrated exactly that.`,
-                technical: "Walk me through how you'd architect a scalable system for a feature that suddenly needs to handle 10x the traffic.",
-                case: "Our main competitor just launched a feature directly targeting our core users. What's your 48-hour response plan?",
-                rapid: "Two hours from a deadline, a critical bug appears. What's your immediate action — exactly?",
-                friendly: "Tell me about a high-pressure moment in a project. How did your skills help you stay grounded?"
+                hr: `You mentioned ${prevAnswer.substring(0, 20).toLowerCase()}. When have you shown that under real pressure?`,
+                technical: "Imagine you suddenly need to handle 10x more traffic. How would you approach redesigning the system?",
+                case: "A competitor launches a feature targeting your core users. Your 48-hour action plan?",
+                rapid: "Critical bug, 2 hours to deadline. What's your first move?",
+                friendly: "Tell me about a high-pressure moment. How did you handle it?"
             },
             4: {
-                hr: "Tell me about the most significant professional setback you've faced. What was the turning point that helped you grow?",
-                technical: "Describe the most complex bug or bottleneck you've ever debugged. Take me through your exact process.",
-                case: "If we had to cut project budget by 50% tomorrow, which core features would you protect — and why?",
-                rapid: "15 seconds: the most creative solution you've ever built for an unglamorous problem. Go.",
-                friendly: "What's a challenge that really tested your resilience? How did it feel when you finally cracked it?"
+                hr: "Tell me about a significant setback. What did you learn from it?",
+                technical: "Describe the most complex technical challenge you've solved. Walk me through your process.",
+                case: "Budget cuts of 50% tomorrow. Which features survive and why?",
+                rapid: "Most creative solution you've built. 15 seconds.",
+                friendly: "What challenge tested your resilience the most? How'd you overcome it?"
             },
             5: {
-                hr: "Looking honestly at your trajectory — what's one real weakness you're actively turning into a strength right now?",
-                technical: "How do you personally make sure your technical skills don't stagnate? What are you actively learning?",
-                case: "Based on our conversation — if you were me, what's the one question you'd ask to see if someone truly understands this role?",
-                rapid: "Final rapid-fire: give me one reason NOT to hire you that actually signals you're a high-potential candidate.",
-                friendly: "Last one — what's the one thing you're most excited to learn if you get to join this team?"
+                hr: "What's one real weakness you're actively turning into a strength right now?",
+                technical: "How do you keep your technical skills sharp? What are you learning?",
+                case: "If you were interviewing for this role, what's the one question you'd ask?",
+                rapid: "One reason NOT to hire you that actually signals high potential?",
+                friendly: "What's one thing you're most excited to learn here?"
             }
         };
-        const q = structure[idx] ? (structure[idx][mode] || structure[idx]['hr']) : "What else would you like the interviewer to know about you?";
+        const q = structure[idx] ? (structure[idx][mode] || structure[idx]['hr']) : "What else would you like me to know about you?";
         this.state.interview.questions.push(q);
     },
 
