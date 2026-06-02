@@ -253,19 +253,37 @@ window.app = {
         // Extract skills - look for skills section and grab items properly
         const skillsPattern = /skills\s*:?\s*\n([\s\S]*?)(?:\n\n|$|\n[A-Z][a-z]+\s*:|\n[A-Z][a-z]+\s*\/)/i;
         const skillsMatch = text.match(skillsPattern);
-        if (skillsMatch) {
+        if (skillsMatch && skillsMatch[1]) {
             const skillsText = skillsMatch[1];
             const skillItems = skillsText.split(/[,•·;\n]/).map(s => s.trim()).filter(s => s.length > 2 && s.length < 40 && !/^[A-Z\s]+$/.test(s) && !/^\d+/.test(s));
             result.skills = skillItems.slice(0, 12).join(', ');
         }
 
+        // Fallback: scan entire text for known tech skills if skills section not found
+        if (!result.skills) {
+            const TECH_TERMS = ['Python', 'JavaScript', 'TypeScript', 'Java', 'C++', 'React', 'Vue', 'Angular', 'Node.js', 'Django', 'Flask', 'SQL', 'PostgreSQL', 'MongoDB', 'AWS', 'Docker', 'Kubernetes', 'Git', 'REST API', 'GraphQL'];
+            const found = TECH_TERMS.filter(t => text.toLowerCase().includes(t.toLowerCase()));
+            if (found.length > 0) {
+                result.skills = found.slice(0, 12).join(', ');
+            }
+        }
+
         // Extract courses - look for coursework section
-        const coursesPattern = /(?:relevant\s+)?coursework|relevant\s+courses|courses?\s+taken|education|academic\s+courses\s*:?\s*\n([\s\S]*?)(?:\n\n|$|\n[A-Z][a-z]+\s*:|\n[A-Z][a-z]+\s*\/)/i;
+        const coursesPattern = /(?:relevant\s+)?coursework|relevant\s+courses|courses?\s+taken|education|academic\s+courses?\s*:?\s*\n([\s\S]*?)(?:\n\n|$|\n[A-Z][a-z]+\s*:|\n[A-Z][a-z]+\s*\/)/i;
         const coursesMatch = text.match(coursesPattern);
-        if (coursesMatch) {
+        if (coursesMatch && coursesMatch[1]) {
             const coursesText = coursesMatch[1];
-            const courseItems = coursesText.split(/[,•;\n]/).map(s => s.trim()).filter(s => s.length > 3 && s.length < 50 && !/^[A-Z\s]+$/.test(s) && !/^\d+/.test(s));
+            const courseItems = coursesText.split(/[,•;\n]/).map(s => s.trim()).filter(s => s.length > 2 && s.length < 50 && !/^[A-Z\s]+$/.test(s) && !/^\d+/.test(s));
             result.courses = courseItems.slice(0, 8).join(', ');
+        }
+
+        // Fallback: look for courses without specific section header
+        if (!result.courses) {
+            const courseKeywords = ['data structures', 'algorithms', 'database', 'web development', 'software engineering', 'machine learning', 'statistics', 'calculus', 'linear algebra'];
+            const foundCourses = courseKeywords.filter(kw => text.toLowerCase().includes(kw));
+            if (foundCourses.length > 0) {
+                result.courses = foundCourses.slice(0, 5).join(', ');
+            }
         }
 
         // Detect field from content
