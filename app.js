@@ -4,7 +4,7 @@ window.app = {
         interviewMode: 'hr',
         isGuest: false,
         currentUser: null,
-        user: { name: '', email: '', field: 'Computer Science / Software', skills: '', courses: '' },
+        user: { name: '', email: '', field: 'Software Engineering', skills: '', courses: '', linkedin: '' },
         job: { description: '', link: '' },
         analysis: { matchScore: 0, difficulty: 'Moderate', strengths: [], gaps: [], topics: [] },
         interview: {
@@ -197,13 +197,95 @@ window.app = {
         const fieldEl = document.getElementById('field-select');
         const skillsEl = document.getElementById('skills-input');
         const coursesEl = document.getElementById('courses-input');
+        const linkedinEl = document.getElementById('linkedin-input');
         this.state.user.name = nameEl ? nameEl.value.trim() : '';
         this.state.user.field = fieldEl ? fieldEl.value : 'Software Engineering';
         this.state.user.skills = skillsEl ? skillsEl.value.trim() : '';
         this.state.user.courses = coursesEl ? coursesEl.value.trim() : '';
+        this.state.user.linkedin = linkedinEl ? linkedinEl.value.trim() : '';
         this.saveUserData();
         this.updateUserUI();
         this.goToStage(2);
+    },
+
+    openEditProfile() {
+        const u = this.state.user;
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+        set('name-input', u.name);
+        set('field-select', u.field || 'Software Engineering');
+        if (!document.getElementById('field-select').value) document.getElementById('field-select').value = 'Software Engineering';
+        set('skills-input', u.skills);
+        set('courses-input', u.courses);
+        set('linkedin-input', u.linkedin);
+        this.goToStage(1);
+    },
+
+    toggleCVImport() {
+        const body = document.getElementById('cv-import-body');
+        const chevron = document.getElementById('cv-chevron');
+        if (!body) return;
+        const isOpen = !body.classList.contains('hidden');
+        body.classList.toggle('hidden', isOpen);
+        if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
+    },
+
+    autofillFromCV() {
+        const cvText = (document.getElementById('cv-text-input') || {}).value || '';
+        if (!cvText.trim()) return;
+        const parsed = this.parseCVText(cvText);
+        const nameEl = document.getElementById('name-input');
+        const skillsEl = document.getElementById('skills-input');
+        const fieldEl = document.getElementById('field-select');
+        if (parsed.name && nameEl) nameEl.value = parsed.name;
+        if (parsed.skills && skillsEl) skillsEl.value = parsed.skills;
+        if (parsed.field && fieldEl) fieldEl.value = parsed.field;
+        const status = document.getElementById('cv-import-status');
+        if (status) {
+            status.classList.remove('hidden');
+            setTimeout(() => status.classList.add('hidden'), 3000);
+        }
+    },
+
+    parseCVText(text) {
+        const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+        const result = { name: '', skills: '', field: '' };
+        const namePat = /^([A-Z][a-z]+)(\s[A-Z][a-z]+){1,3}$/;
+        const candidate = lines.find(l => namePat.test(l) && !/\d|@|http|www/.test(l));
+        if (candidate) result.name = candidate;
+        const skillsHeaderIdx = lines.findIndex(l => /^(technical\s+)?skills|core\s+competencies/i.test(l));
+        if (skillsHeaderIdx !== -1) {
+            const skillLines = [];
+            for (let i = skillsHeaderIdx + 1; i < lines.length && i < skillsHeaderIdx + 6; i++) {
+                if (/^[A-Z][A-Z\s]{4,}$/.test(lines[i])) break;
+                skillLines.push(lines[i]);
+            }
+            result.skills = skillLines.join(', ').split(/[,|•·;\/]/).map(s => s.trim()).filter(s => s.length > 1 && s.length < 30).slice(0, 10).join(', ');
+        }
+        if (!result.skills) {
+            const TECH_TERMS = ['Python', 'JavaScript', 'TypeScript', 'Java', 'C++', 'C#', 'Go', 'Rust', 'Swift', 'Kotlin', 'React', 'Vue', 'Angular', 'Node.js', 'Django', 'Flask', 'Spring', 'SQL', 'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'AWS', 'GCP', 'Azure', 'Docker', 'Kubernetes', 'Git', 'REST', 'GraphQL', 'TensorFlow', 'PyTorch', 'Pandas', 'NumPy', 'Figma', 'Agile', 'Scrum', 'Linux', 'Excel', 'R', 'machine learning', 'deep learning', 'data analysis', 'DevOps', 'CI/CD'];
+            const textLower = text.toLowerCase();
+            const found = TECH_TERMS.filter(t => textLower.includes(t.toLowerCase()));
+            result.skills = found.slice(0, 10).join(', ');
+        }
+        const FIELD_MAP = [
+            { keywords: ['machine learning', 'deep learning', 'neural network', 'nlp', 'computer vision'], field: 'Artificial Intelligence' },
+            { keywords: ['data science', 'data analyst', 'pandas', 'numpy', 'tableau', 'power bi'], field: 'Data Science' },
+            { keywords: ['software engineer', 'backend', 'frontend', 'fullstack', 'web developer', 'mobile developer'], field: 'Software Engineering' },
+            { keywords: ['cybersecurity', 'penetration testing', 'soc analyst', 'ethical hacking', 'infosec'], field: 'Cybersecurity' },
+            { keywords: ['cloud', 'devops', 'kubernetes', 'terraform', 'ci/cd', 'infrastructure'], field: 'Cloud / DevOps' },
+            { keywords: ['ux', 'user experience', 'user research', 'usability', 'wireframe', 'figma'], field: 'UX Research' },
+            { keywords: ['finance', 'investment', 'portfolio', 'equity', 'accounting', 'cfa'], field: 'Finance' },
+            { keywords: ['marketing', 'seo', 'campaigns', 'brand', 'content strategy', 'digital marketing'], field: 'Digital Marketing' },
+            { keywords: ['product manager', 'product management', 'roadmap', 'stakeholder', 'go-to-market'], field: 'Business Administration' },
+        ];
+        const textLower = text.toLowerCase();
+        for (const { keywords, field } of FIELD_MAP) {
+            if (keywords.some(k => textLower.includes(k))) {
+                result.field = field;
+                break;
+            }
+        }
+        return result;
     },
 
     handleJobSubmit() {
@@ -250,6 +332,21 @@ window.app = {
         localStorage.removeItem('prepwise_session_v2');
         this.state.currentUser = null;
         this.state.isGuest = false;
+        location.reload();
+    },
+
+    deleteAccount() {
+        if (!this.state.currentUser || !this.state.currentUser.email) {
+            alert('No account to delete.');
+            return;
+        }
+        const confirmed = confirm('Delete your account?\n\nThis will permanently remove your profile and all session history. This cannot be undone.');
+        if (!confirmed) return;
+        const email = this.state.currentUser.email;
+        const users = JSON.parse(localStorage.getItem('prepwise_users_v2') || '{}');
+        delete users[email];
+        localStorage.setItem('prepwise_users_v2', JSON.stringify(users));
+        localStorage.removeItem('prepwise_session_v2');
         location.reload();
     },
 
@@ -828,12 +925,39 @@ window.app = {
         const el = (id) => document.getElementById(id);
         const name = this.state.user.name || 'Guest User';
         if (el('dash-user-name')) el('dash-user-name').textContent = name;
-        if (el('dash-user-field')) el('dash-user-field').textContent = this.state.user.field || 'Neural Pipeline: Ready';
+        if (el('dash-user-field')) el('dash-user-field').textContent = this.state.user.field || '';
         if (el('user-initials-dash')) el('user-initials-dash').textContent = name.split(' ').map(n => n[0]).join('').toUpperCase();
 
+        const tagsContainer = el('dash-skills-tags');
+        if (tagsContainer) {
+            const skills = (this.state.user.skills || '').split(',').map(s => s.trim()).filter(Boolean);
+            tagsContainer.innerHTML = skills.length ? skills.map(s => `<span class="inline-block px-2.5 py-0.5 bg-brand-50 text-brand-500 rounded-full text-[9px] font-black uppercase tracking-wide border border-brand-100">${s}</span>`).join('') : '';
+        }
+
+        const linkedinLink = el('dash-linkedin-link');
+        const linkedinText = el('dash-linkedin-text');
+        if (linkedinLink) {
+            const url = this.state.user.linkedin || '';
+            if (url) {
+                linkedinLink.href = url.startsWith('http') ? url : `https://${url}`;
+                if (linkedinText) {
+                    try { linkedinText.textContent = new URL(linkedinLink.href).hostname + new URL(linkedinLink.href).pathname; }
+                    catch { linkedinText.textContent = 'LinkedIn Profile'; }
+                }
+                linkedinLink.classList.remove('hidden');
+                linkedinLink.classList.add('flex');
+            } else {
+                linkedinLink.classList.add('hidden');
+                linkedinLink.classList.remove('flex');
+            }
+        }
+
         const list = el('session-history-list');
+        const emptyCTA = el('dash-session-empty-cta');
         if (list) {
             if (this.state.sessions.length > 0) {
+                if (emptyCTA) emptyCTA.classList.add('hidden');
+                list.classList.remove('hidden');
                 list.innerHTML = this.state.sessions.map(s => `
                     <div class="p-4 bg-slate-50 rounded-xl flex items-center justify-between hover:bg-white hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-slate-100">
                         <div class="flex items-center gap-4">
@@ -850,10 +974,13 @@ window.app = {
                     </div>
                 `).join('');
             } else {
-                list.innerHTML = '<p class="text-slate-300 font-bold text-xs text-center py-6">No sessions yet. Start your first interview!</p>';
+                list.innerHTML = '';
+                list.classList.add('hidden');
+                if (emptyCTA) emptyCTA.classList.remove('hidden');
             }
         }
         this.goToStage(7);
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     },
 
     // --- Live Speech Transcription ---

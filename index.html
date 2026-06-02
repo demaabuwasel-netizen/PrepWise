@@ -49,6 +49,15 @@
         .wave-bar { animation: wave 0.7s ease-in-out infinite; transform-origin: bottom; }
         #next-question-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+        /* Progress Stepper */
+        .stepper-step { display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; }
+        .stepper-step::after { content: ''; position: absolute; top: 14px; left: calc(50% + 16px); width: calc(100% - 16px); height: 2px; background: #F1F5F9; }
+        .stepper-step:last-child::after { display: none; }
+        .stepper-step.active .stepper-dot { background: #4F80FF; border-color: #4F80FF; color: white; }
+        .stepper-step.done .stepper-dot { background: #63D5C4; border-color: #63D5C4; color: white; }
+        .stepper-step.done::after { background: #63D5C4; }
+        .stepper-dot { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #E2E8F0; background: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 900; color: #CBD5E1; z-index: 1; }
+
         /* ── Dark Mode ── */
         body.dark { background-color: #0f172a !important; color: #e2e8f0 !important; }
         body.dark #logo-text { color: #f1f5f9 !important; }
@@ -109,6 +118,20 @@
         /* Scrollbar */
         body.dark ::-webkit-scrollbar-track { background: #0f172a; }
         body.dark ::-webkit-scrollbar-thumb { background: #334155; }
+        /* Stepper dark mode */
+        body.dark .stepper-step::after { background: rgba(255,255,255,0.08); }
+        body.dark .stepper-dot { background: #1e293b; border-color: rgba(255,255,255,0.12); color: rgba(241,245,249,0.3); }
+        body.dark .stepper-step.active .stepper-dot { box-shadow: 0 0 0 3px rgba(79,128,255,0.15); }
+        /* CV Import dark mode */
+        body.dark #cv-import-body { background-color: rgba(255,255,255,0.03) !important; border-color: rgba(255,255,255,0.08) !important; }
+        body.dark #cv-import-toggle:hover { background-color: rgba(255,255,255,0.05) !important; }
+        /* Skill tags dark mode */
+        body.dark #dash-skills-tags span { background-color: rgba(79,128,255,0.12) !important; border-color: rgba(79,128,255,0.2) !important; }
+        /* Delete button dark mode */
+        body.dark #delete-account-btn { border-color: rgba(248,113,113,0.2) !important; }
+        /* Empty CTA dark mode */
+        body.dark #dash-session-empty-cta a { border-color: rgba(79,128,255,0.25) !important; }
+        body.dark #dash-session-empty-cta a:hover { background-color: rgba(79,128,255,0.08) !important; }
     </style>
 </head>
 <body class="min-h-screen bg-[#F8FAFC]">
@@ -253,10 +276,21 @@
                     <button onclick="window.app.goBack()" class="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-brand-500 transition-colors mb-6">
                         <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i> Back
                     </button>
-                    <div class="text-center mb-6">
-                        <div class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#EEF2FF] text-[#4F80FF] rounded-full text-[9px] font-black uppercase tracking-widest border border-[#E0E7FF] mb-4">
-                            <i data-lucide="user" class="w-3 h-3"></i> Step 1 of 3
+                    <div class="flex justify-center items-start gap-8 mb-6">
+                        <div class="stepper-step active" id="step-profile">
+                            <div class="stepper-dot">1</div>
+                            <span class="text-[9px] font-black uppercase tracking-widest text-brand-500">Profile</span>
                         </div>
+                        <div class="stepper-step" id="step-analysis">
+                            <div class="stepper-dot">2</div>
+                            <span class="text-[9px] font-black uppercase tracking-widest text-slate-300">Role Analysis</span>
+                        </div>
+                        <div class="stepper-step" id="step-mode">
+                            <div class="stepper-dot">3</div>
+                            <span class="text-[9px] font-black uppercase tracking-widest text-slate-300">Interview Mode</span>
+                        </div>
+                    </div>
+                    <div class="text-center mb-6">
                         <h2 class="text-3xl font-black text-brand-900 tracking-tighter">Your Profile</h2>
                         <p class="text-slate-500 mt-1.5 text-sm font-medium">Help us personalize your experience.</p>
                     </div>
@@ -278,6 +312,28 @@
                                 <i data-lucide="book-open" class="w-4 h-4 text-slate-300 mr-3 mt-0.5 shrink-0"></i>
                                 <textarea id="courses-input" rows="2" class="bg-transparent w-full text-brand-900 font-bold placeholder:text-slate-300 outline-none resize-none text-sm" placeholder="Relevant courses (optional)"></textarea>
                             </div>
+                            <div class="input-pill flex items-center px-4 py-3.5 rounded-xl">
+                                <i data-lucide="linkedin" class="w-4 h-4 text-slate-300 mr-3 shrink-0"></i>
+                                <input type="url" id="linkedin-input" class="bg-transparent w-full text-brand-900 font-bold placeholder:text-slate-300 outline-none text-sm" placeholder="LinkedIn profile URL (optional)">
+                            </div>
+                            <div class="border border-slate-100 rounded-xl overflow-hidden">
+                                <button type="button" id="cv-import-toggle" onclick="window.app.toggleCVImport()" class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-50 transition-colors">
+                                    <span class="flex items-center gap-2 text-xs font-black text-slate-500 uppercase tracking-widest">
+                                        <i data-lucide="file-up" class="w-3.5 h-3.5 text-brand-500"></i> Import from CV
+                                    </span>
+                                    <i data-lucide="chevron-down" id="cv-chevron" class="w-4 h-4 text-slate-300 transition-transform duration-200"></i>
+                                </button>
+                                <div id="cv-import-body" class="hidden px-4 pb-4 space-y-3 border-t border-slate-100 pt-3">
+                                    <p class="text-[10px] font-bold text-slate-400">Paste your CV/resume text below. We'll auto-fill your name, skills, and field.</p>
+                                    <div class="input-pill flex items-start px-4 py-3.5 rounded-xl">
+                                        <textarea id="cv-text-input" rows="5" class="bg-transparent w-full text-brand-900 font-bold placeholder:text-slate-300 outline-none resize-none text-sm" placeholder="Paste your CV or resume text here..."></textarea>
+                                    </div>
+                                    <button type="button" onclick="window.app.autofillFromCV()" class="w-full py-2.5 rounded-xl border border-brand-500 text-brand-500 font-black text-xs uppercase tracking-widest hover:bg-brand-50 transition-all">
+                                        <i data-lucide="wand-2" class="w-3.5 h-3.5 mr-1 inline"></i> Auto-fill from CV
+                                    </button>
+                                    <p id="cv-import-status" class="hidden text-[10px] font-bold text-center text-[#63D5C4]">Fields updated from CV.</p>
+                                </div>
+                            </div>
                             <button type="submit" class="w-full btn-gradient text-white font-black py-3.5 rounded-xl text-sm shadow-sm mt-1">
                                 Continue <i data-lucide="arrow-right" class="w-4 h-4 ml-1 inline"></i>
                             </button>
@@ -292,10 +348,21 @@
                     <button onclick="window.app.goBack()" class="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-brand-500 transition-colors mb-2">
                         <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i> Back
                     </button>
-                    <div class="text-center mb-4">
-                        <div class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#EEF2FF] text-[#4F80FF] rounded-full text-[9px] font-black uppercase tracking-widest border border-[#E0E7FF] mb-4">
-                            <i data-lucide="zap" class="w-3 h-3"></i> Step 2 of 3
+                    <div class="flex justify-center items-start gap-8 mb-6">
+                        <div class="stepper-step done" id="step-profile">
+                            <div class="stepper-dot">1</div>
+                            <span class="text-[9px] font-black uppercase tracking-widest text-[#63D5C4]">Profile</span>
                         </div>
+                        <div class="stepper-step active" id="step-analysis">
+                            <div class="stepper-dot">2</div>
+                            <span class="text-[9px] font-black uppercase tracking-widest text-brand-500">Role Analysis</span>
+                        </div>
+                        <div class="stepper-step" id="step-mode">
+                            <div class="stepper-dot">3</div>
+                            <span class="text-[9px] font-black uppercase tracking-widest text-slate-300">Interview Mode</span>
+                        </div>
+                    </div>
+                    <div class="text-center mb-4">
                         <h2 class="text-3xl font-black text-brand-900 tracking-tighter">Role Analysis</h2>
                         <p class="text-slate-500 mt-1.5 text-sm font-medium">Paste a job description and let AI map the requirements.</p>
                     </div>
@@ -362,10 +429,21 @@
                     <button onclick="window.app.goBack()" class="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-brand-500 transition-colors mb-6">
                         <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i> Back
                     </button>
-                    <div class="text-center mb-7">
-                        <div class="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#EEF2FF] text-[#4F80FF] rounded-full text-[9px] font-black uppercase tracking-widest border border-[#E0E7FF] mb-4">
-                            <i data-lucide="list" class="w-3 h-3"></i> Step 3 of 3
+                    <div class="flex justify-center items-start gap-8 mb-7">
+                        <div class="stepper-step done" id="step-profile">
+                            <div class="stepper-dot">1</div>
+                            <span class="text-[9px] font-black uppercase tracking-widest text-[#63D5C4]">Profile</span>
                         </div>
+                        <div class="stepper-step done" id="step-analysis">
+                            <div class="stepper-dot">2</div>
+                            <span class="text-[9px] font-black uppercase tracking-widest text-[#63D5C4]">Role Analysis</span>
+                        </div>
+                        <div class="stepper-step active" id="step-mode">
+                            <div class="stepper-dot">3</div>
+                            <span class="text-[9px] font-black uppercase tracking-widest text-brand-500">Interview Mode</span>
+                        </div>
+                    </div>
+                    <div class="text-center mb-7">
                         <h2 class="text-3xl font-black text-brand-900 tracking-tighter">Choose Your Mode</h2>
                         <p class="text-slate-500 mt-1.5 text-sm font-medium">Pick the interview style that matches your goal.</p>
                     </div>
@@ -547,37 +625,56 @@
                 <div class="max-w-3xl mx-auto w-full space-y-4">
 
                     <!-- Profile Card -->
-                    <div class="bg-white rounded-2xl p-6 shadow-soft border border-slate-100 flex items-center gap-5">
-                        <div class="w-14 h-14 bg-brand-900 text-white rounded-xl flex items-center justify-center text-lg font-black shrink-0" id="user-initials-dash">U</div>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Dashboard</p>
-                            <h2 id="dash-user-name" class="text-xl font-black text-brand-900 tracking-tighter truncate">User</h2>
-                            <p id="dash-user-field" class="text-slate-400 font-medium text-xs mt-0.5 truncate"></p>
+                    <div class="bg-white rounded-2xl p-6 shadow-soft border border-slate-100">
+                        <div class="flex items-start gap-5">
+                            <div class="w-14 h-14 bg-brand-900 text-white rounded-xl flex items-center justify-center text-lg font-black shrink-0" id="user-initials-dash">U</div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Your Profile</p>
+                                <h2 id="dash-user-name" class="text-xl font-black text-brand-900 tracking-tighter truncate">User</h2>
+                                <p id="dash-user-field" class="text-slate-400 font-medium text-xs mt-0.5 truncate"></p>
+                                <div id="dash-skills-tags" class="flex flex-wrap gap-1.5 mt-2"></div>
+                                <a id="dash-linkedin-link" href="#" target="_blank" rel="noopener noreferrer"
+                                   class="hidden items-center gap-1.5 mt-2 text-[10px] font-bold text-brand-500 hover:underline">
+                                    <i data-lucide="linkedin" class="w-3 h-3"></i>
+                                    <span id="dash-linkedin-text">LinkedIn Profile</span>
+                                </a>
+                            </div>
+                            <button onclick="window.app.goToStage(2)" class="btn-gradient text-white font-black px-5 py-2.5 rounded-xl shadow-sm text-xs uppercase tracking-wide shrink-0">
+                                New Session <i data-lucide="plus" class="w-3.5 h-3.5 ml-1 inline"></i>
+                            </button>
                         </div>
-                        <button onclick="window.app.goToStage(2)" class="btn-gradient text-white font-black px-5 py-2.5 rounded-xl shadow-sm text-xs uppercase tracking-wide shrink-0">
-                            New Session <i data-lucide="plus" class="w-3.5 h-3.5 ml-1 inline"></i>
-                        </button>
                     </div>
 
                     <!-- Session History -->
                     <div class="bg-white rounded-2xl p-6 shadow-soft border border-slate-100">
                         <h3 class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4">Session History</h3>
                         <div id="session-history-list" class="space-y-3">
-                            <p class="text-slate-300 font-bold text-xs text-center py-6">No sessions yet. Start your first interview!</p>
+                        </div>
+                        <div id="dash-session-empty-cta" class="hidden">
+                            <a onclick="window.app.goToStage(2)" class="flex items-center justify-between p-5 rounded-xl border-2 border-dashed border-brand-200 hover:border-brand-500 hover:bg-brand-50 transition-all cursor-pointer group">
+                                <div>
+                                    <p class="text-sm font-black text-brand-900 tracking-tight">Ready to practice?</p>
+                                    <p class="text-xs font-bold text-slate-400 mt-0.5">Start your first mock interview</p>
+                                </div>
+                                <div class="w-10 h-10 bg-brand-500 text-white rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform">
+                                    <i data-lucide="arrow-right" class="w-5 h-5"></i>
+                                </div>
+                            </a>
                         </div>
                     </div>
 
-                    <!-- Quick Actions -->
-                    <div class="grid grid-cols-2 gap-4">
-                        <button onclick="window.app.goToStage(1)" class="feature-card text-left cursor-pointer">
-                            <div class="w-9 h-9 bg-blue-50 text-brand-500 rounded-lg flex items-center justify-center mb-3"><i data-lucide="user" class="w-4 h-4"></i></div>
-                            <h4 class="text-xs font-black text-brand-900 uppercase">Update Profile</h4>
-                            <p class="text-[10px] text-slate-400 font-bold mt-1">Edit your skills and focus area.</p>
+                    <!-- Account Actions -->
+                    <button onclick="window.app.openEditProfile()" class="feature-card text-left cursor-pointer w-full">
+                        <div class="w-9 h-9 bg-blue-50 text-brand-500 rounded-lg flex items-center justify-center mb-3"><i data-lucide="user-pen" class="w-4 h-4"></i></div>
+                        <h4 class="text-xs font-black text-brand-900 uppercase">Update Profile</h4>
+                        <p class="text-[10px] text-slate-400 font-bold mt-1">Edit your skills, LinkedIn, and focus area.</p>
+                    </button>
+                    <div class="flex items-center gap-3 pt-2">
+                        <button onclick="window.app.signOut()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-100 text-slate-400 font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all">
+                            <i data-lucide="log-out" class="w-3.5 h-3.5"></i> Sign Out
                         </button>
-                        <button onclick="window.app.signOut()" class="feature-card text-left cursor-pointer">
-                            <div class="w-9 h-9 bg-red-50 text-red-400 rounded-lg flex items-center justify-center mb-3"><i data-lucide="log-out" class="w-4 h-4"></i></div>
-                            <h4 class="text-xs font-black text-brand-900 uppercase">Sign Out</h4>
-                            <p class="text-[10px] text-slate-400 font-bold mt-1">Clear your session and start fresh.</p>
+                        <button onclick="window.app.deleteAccount()" id="delete-account-btn" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-red-100 text-red-400 font-black text-xs uppercase tracking-widest hover:bg-red-50 transition-all">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Account
                         </button>
                     </div>
                 </div>
