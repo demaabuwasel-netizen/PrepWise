@@ -331,19 +331,34 @@ window.app = {
 
     // --- Analysis ---
     runAnalysis() {
-        const skills = this.state.user.skills.toLowerCase();
-        const baseScore = Math.floor(Math.random() * 20) + 70;
-        this.state.analysis.matchScore = baseScore;
-        this.state.analysis.difficulty = baseScore > 85 ? 'Moderate' : (baseScore > 78 ? 'Challenging' : 'Advanced');
-        const diffLevel = baseScore > 85 ? 2 : (baseScore > 78 ? 3 : 4);
+        const jobDesc = this.state.job.description.toLowerCase();
+        const userSkills = this.state.user.skills.toLowerCase();
+        const userField = this.state.user.field.toLowerCase();
 
-        const skillList = this.state.user.skills.split(',').map(s => s.trim()).filter(Boolean);
-        this.state.analysis.strengths = skillList.slice(0, 3).length ? skillList.slice(0, 3) : ['Communication', 'Problem Solving', 'Adaptability'];
-        this.state.analysis.gaps = ['Stakeholder Strategy', 'Unit Test Patterns', 'System Design'].filter(g => !skills.includes(g.toLowerCase())).slice(0, 2);
-        this.state.analysis.topics = ['Analytical Depth', 'STAR Storytelling', 'Tool Proficiency'];
+        // Extract key requirements from job description
+        const jobKeywords = this.extractJobKeywords(jobDesc);
+        const userSkillsList = this.state.user.skills.split(',').map(s => s.trim()).filter(Boolean);
+
+        // Calculate match score based on skill overlap and field relevance
+        const matchScore = this.calculateMatchScore(jobKeywords, userSkillsList, userField, jobDesc);
+        this.state.analysis.matchScore = matchScore;
+
+        // Determine difficulty based on match score and gap count
+        const gaps = this.identifySkillGaps(jobKeywords, userSkillsList);
+        this.state.analysis.difficulty = this.getDifficultyLevel(matchScore, gaps.length);
+        const diffLevel = matchScore > 85 ? 2 : (matchScore > 70 ? 3 : 4);
+
+        // Extract strengths from what user has that job needs
+        this.state.analysis.strengths = this.extractStrengths(jobKeywords, userSkillsList, userField);
+
+        // Identify gaps based on job requirements
+        this.state.analysis.gaps = gaps.slice(0, 2);
+
+        // Focus topics based on gaps and job requirements
+        this.state.analysis.topics = this.generateFocusTopics(jobKeywords, gaps, userField);
 
         const el = (id) => document.getElementById(id);
-        if (el('match-score')) el('match-score').textContent = `${baseScore}%`;
+        if (el('match-score')) el('match-score').textContent = `${matchScore}%`;
         if (el('difficulty-text')) el('difficulty-text').textContent = this.state.analysis.difficulty;
         if (el('difficulty-dots')) {
             Array.from(el('difficulty-dots').children).forEach((dot, i) => {
@@ -356,6 +371,139 @@ window.app = {
         if (el('job-input-section')) el('job-input-section').classList.add('hidden');
         if (el('analysis-results-section')) el('analysis-results-section').classList.remove('hidden');
         if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
+
+    extractJobKeywords(jobDesc) {
+        const techSkills = ['python', 'javascript', 'java', 'sql', 'react', 'node', 'aws', 'docker', 'kubernetes', 'typescript', 'c++', 'go', 'rust', 'scala', 'spring', 'django', 'flask', 'angular', 'vue', 'backend', 'frontend', 'fullstack', 'devops', 'cloud', 'api', 'rest', 'graphql', 'microservices', 'databases', 'mongodb', 'postgres', 'mysql', 'redis', 'elasticsearch', 'machine learning', 'data analysis', 'analytics', 'ai', 'gcp', 'azure'];
+        const softSkills = ['communication', 'leadership', 'teamwork', 'collaboration', 'problem solving', 'critical thinking', 'project management', 'agile', 'scrum', 'stakeholder management', 'mentoring', 'mentorship', 'presentation', 'negotiation', 'strategic thinking', 'analytical'];
+        const responsibilities = ['design', 'architect', 'develop', 'build', 'implement', 'debug', 'test', 'optimize', 'analyze', 'research', 'manage', 'lead', 'mentor', 'review', 'document'];
+
+        const found = { tech: [], soft: [], responsibilities: [] };
+
+        techSkills.forEach(s => { if (jobDesc.includes(s)) found.tech.push(s); });
+        softSkills.forEach(s => { if (jobDesc.includes(s)) found.soft.push(s); });
+        responsibilities.forEach(r => { if (jobDesc.includes(r)) found.responsibilities.push(r); });
+
+        return found;
+    },
+
+    calculateMatchScore(jobKeywords, userSkillsList, userField, jobDesc) {
+        let score = 50;
+        const userSkillsLower = userSkillsList.map(s => s.toLowerCase());
+
+        // Score technical skill matches
+        jobKeywords.tech.forEach(skill => {
+            if (userSkillsLower.some(us => us.includes(skill) || skill.includes(us.split(' ')[0]))) {
+                score += 8;
+            }
+        });
+
+        // Score soft skill matches
+        jobKeywords.soft.forEach(skill => {
+            if (userSkillsLower.some(us => us.includes(skill.split(' ')[0])) || jobDesc.includes('experience')) {
+                score += 5;
+            }
+        });
+
+        // Field relevance bonus
+        if (userField.includes('software') || userField.includes('computer') || userField.includes('engineering')) {
+            if (jobDesc.includes('engineer') || jobDesc.includes('developer') || jobDesc.includes('software')) {
+                score += 10;
+            }
+        }
+
+        // Penalize if major tech stack mismatch
+        if (jobKeywords.tech.length > 0 && !userSkillsLower.some(s => jobKeywords.tech[0].includes(s) || s.includes(jobKeywords.tech[0].split(' ')[0]))) {
+            score -= 15;
+        }
+
+        return Math.max(40, Math.min(95, score));
+    },
+
+    identifySkillGaps(jobKeywords, userSkillsList) {
+        const userSkillsLower = userSkillsList.map(s => s.toLowerCase());
+        const gaps = [];
+
+        jobKeywords.tech.slice(0, 5).forEach(skill => {
+            if (!userSkillsLower.some(us => us.includes(skill) || skill.includes(us.split(' ')[0]))) {
+                gaps.push(skill.charAt(0).toUpperCase() + skill.slice(1));
+            }
+        });
+
+        jobKeywords.soft.slice(0, 3).forEach(skill => {
+            if (!userSkillsLower.some(us => us.toLowerCase().includes(skill.split(' ')[0]))) {
+                gaps.push(skill.charAt(0).toUpperCase() + skill.slice(1) + ' Skills');
+            }
+        });
+
+        return gaps.slice(0, 3);
+    },
+
+    getDifficultyLevel(matchScore, gapCount) {
+        if (matchScore >= 80) return 'Moderate';
+        if (matchScore >= 65) return 'Challenging';
+        return 'Advanced';
+    },
+
+    extractStrengths(jobKeywords, userSkillsList, userField) {
+        const strengths = [];
+        const userSkillsLower = userSkillsList.map(s => s.toLowerCase());
+
+        // Add user's relevant skills that match job
+        userSkillsList.slice(0, 2).forEach(skill => {
+            if (jobKeywords.tech.some(t => skill.toLowerCase().includes(t) || t.includes(skill.toLowerCase().split(' ')[0]))) {
+                strengths.push(skill);
+            }
+        });
+
+        // Add field-specific strengths
+        if (userField.includes('software') || userField.includes('computer')) {
+            strengths.push('Technical Foundation');
+        }
+        if (userField.includes('data') || userField.includes('machine')) {
+            strengths.push('Analytical Thinking');
+        }
+
+        // Generic professional strengths
+        if (strengths.length < 3) {
+            const genericStrengths = ['Problem Solving', 'Collaboration', 'Learning Agility', 'Communication'];
+            genericStrengths.forEach(s => {
+                if (strengths.length < 3 && !strengths.includes(s)) {
+                    strengths.push(s);
+                }
+            });
+        }
+
+        return strengths.slice(0, 3);
+    },
+
+    generateFocusTopics(jobKeywords, gaps, userField) {
+        const topics = [];
+
+        // Add top tech skill gap as focus topic
+        if (jobKeywords.tech.length > 0) {
+            topics.push(jobKeywords.tech[0].charAt(0).toUpperCase() + jobKeywords.tech[0].slice(1) + ' Proficiency');
+        }
+
+        // Add soft skill focus
+        if (jobKeywords.soft.length > 0) {
+            topics.push(jobKeywords.soft[0].charAt(0).toUpperCase() + jobKeywords.soft[0].slice(1));
+        }
+
+        // Add role-specific focus
+        if (jobKeywords.responsibilities.length > 0) {
+            topics.push(jobKeywords.responsibilities[0].charAt(0).toUpperCase() + jobKeywords.responsibilities[0].slice(1) + ' Best Practices');
+        }
+
+        // Ensure we have 3 topics
+        const fallbacks = ['System Design Patterns', 'STAR Method Storytelling', 'Real-world Problem Solving'];
+        fallbacks.forEach(f => {
+            if (topics.length < 3 && !topics.includes(f)) {
+                topics.push(f);
+            }
+        });
+
+        return topics.slice(0, 3);
     },
 
     showModeSelection() { this.goToStage(3); },
