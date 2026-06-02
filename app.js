@@ -3,6 +3,7 @@ window.app = {
         currentStage: 0,
         interviewMode: 'hr',
         isGuest: false,
+        isEditingProfile: false,
         currentUser: null,
         user: { name: '', email: '', field: 'Software Engineering', skills: '', courses: '', linkedin: '' },
         job: { description: '', link: '' },
@@ -203,12 +204,19 @@ window.app = {
         this.state.user.skills = skillsEl ? skillsEl.value.trim() : '';
         this.state.user.courses = coursesEl ? coursesEl.value.trim() : '';
         this.state.user.linkedin = linkedinEl ? linkedinEl.value.trim() : '';
+        const wasEditing = this.state.isEditingProfile;
+        this.state.isEditingProfile = false;
         this.saveUserData();
         this.updateUserUI();
-        this.goToStage(2);
+        if (wasEditing) {
+            this.showDashboard();
+        } else {
+            this.goToStage(2);
+        }
     },
 
     openEditProfile() {
+        this.state.isEditingProfile = true;
         const u = this.state.user;
         const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
         set('name-input', u.name);
@@ -218,6 +226,28 @@ window.app = {
         set('courses-input', u.courses);
         set('linkedin-input', u.linkedin);
         this.goToStage(1);
+        this.updateOnboardingUI();
+    },
+
+    updateOnboardingUI() {
+        const isEdit = this.state.isEditingProfile;
+        const title = document.getElementById('onboarding-title');
+        const subtitle = document.getElementById('onboarding-subtitle');
+        const stepper = document.getElementById('onboarding-stepper');
+        const backBtn = document.getElementById('onboarding-back-btn');
+        const submitBtn = document.getElementById('onboarding-submit-btn');
+
+        if (title) title.textContent = isEdit ? 'Edit Your Profile' : 'Your Profile';
+        if (subtitle) subtitle.textContent = isEdit ? 'Update your details below.' : 'Help us personalize your experience.';
+        if (stepper) stepper.classList.toggle('hidden', isEdit);
+        if (backBtn) {
+            backBtn.textContent = isEdit ? '← Back to Dashboard' : '← Back';
+            backBtn.onclick = isEdit ? (() => { this.state.isEditingProfile = false; this.showDashboard(); }) : (() => this.goBack());
+        }
+        if (submitBtn) {
+            submitBtn.innerHTML = isEdit ? 'Save Changes <i data-lucide="check" class="w-4 h-4 ml-1 inline"></i>' : 'Continue <i data-lucide="arrow-right" class="w-4 h-4 ml-1 inline"></i>';
+        }
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     },
 
     toggleCVImport() {
@@ -446,33 +476,68 @@ window.app = {
         if (typeof lucide !== 'undefined') lucide.createIcons();
     },
 
+    extractRequirements(jobDesc) {
+        const lines = jobDesc.split('\n').map(l => l.trim()).filter(Boolean);
+        const reqLines = lines.filter(l =>
+            /^[-•*]|^\d+\.|experience|proficien|knowledge|familiar|skill|must|required|ability/i.test(l)
+        );
+        const requirements = reqLines.map(l =>
+            l.replace(/^[-•*\d.]+\s*/, '').replace(/\(.*?\)/g, '').trim()
+        ).filter(l => l.length > 5 && l.length < 120);
+        return requirements;
+    },
+
+    matchRequirements(requirements, userSkillsList) {
+        const userLower = userSkillsList.map(s => s.toLowerCase());
+        const matched = [], missing = [];
+        requirements.forEach(req => {
+            const reqLower = req.toLowerCase();
+            const isMatch = userLower.some(skill =>
+                reqLower.includes(skill) || skill.split(' ').some(word => word.length > 3 && reqLower.includes(word))
+            );
+            if (isMatch) matched.push(req);
+            else missing.push(req);
+        });
+        return { matched, missing };
+    },
+
     // --- Analysis ---
     runAnalysis() {
-        const jobDesc = this.state.job.description.toLowerCase();
-        const userSkills = this.state.user.skills.toLowerCase();
+        const jobDesc = this.state.job.description;
         const userField = this.state.user.field.toLowerCase();
-
-        // Extract key requirements from job description
-        const jobKeywords = this.extractJobKeywords(jobDesc);
         const userSkillsList = this.state.user.skills.split(',').map(s => s.trim()).filter(Boolean);
 
-        // Calculate match score based on skill overlap and field relevance
-        const matchScore = this.calculateMatchScore(jobKeywords, userSkillsList, userField, jobDesc);
+        // Extract requirements and match
+        const requirements = this.extractRequirements(jobDesc);
+        let matchScore = 50;
+        let strengths = [];
+        let gaps = [];
+        let topics = [];
+
+        if (requirements.length > 0) {
+            const { matched, missing } = this.matchRequirements(requirements, userSkillsList);
+            matchScore = Math.max(20, Math.min(95, Math.round(matched.length / requirements.length * 100) + (Math.random() * 10 - 5)));
+
+            strengths = matched.slice(0, 4);
+            gaps = missing.slice(0, 6);
+            topics = gaps.slice(0, 3);
+        } else {
+            // Fallback to old method if no requirements found
+            const jobDescLower = jobDesc.toLowerCase();
+            const jobKeywords = this.extractJobKeywords(jobDescLower);
+            matchScore = this.calculateMatchScore(jobKeywords, userSkillsList, userField, jobDescLower);
+            strengths = this.extractStrengths(jobKeywords, userSkillsList, userField);
+            gaps = this.identifySkillGaps(jobKeywords, userSkillsList);
+            topics = this.generateFocusTopics(jobKeywords, gaps, userField);
+        }
+
         this.state.analysis.matchScore = matchScore;
-
-        // Determine difficulty based on match score and gap count
-        const gaps = this.identifySkillGaps(jobKeywords, userSkillsList);
+        this.state.analysis.strengths = strengths;
+        this.state.analysis.gaps = gaps;
+        this.state.analysis.topics = topics;
         this.state.analysis.difficulty = this.getDifficultyLevel(matchScore, gaps.length);
+
         const diffLevel = matchScore > 85 ? 2 : (matchScore > 70 ? 3 : 4);
-
-        // Extract strengths from what user has that job needs
-        this.state.analysis.strengths = this.extractStrengths(jobKeywords, userSkillsList, userField);
-
-        // Identify gaps based on job requirements
-        this.state.analysis.gaps = gaps.slice(0, 2);
-
-        // Focus topics based on gaps and job requirements
-        this.state.analysis.topics = this.generateFocusTopics(jobKeywords, gaps, userField);
 
         const el = (id) => document.getElementById(id);
         if (el('match-score')) el('match-score').textContent = `${matchScore}%`;
@@ -482,9 +547,19 @@ window.app = {
                 dot.className = `w-3.5 h-3.5 rounded-full ${i < diffLevel ? 'bg-accent-lavender shadow-[0_0_10px_rgba(155,138,251,0.4)]' : 'bg-slate-200'}`;
             });
         }
-        if (el('analysis-strengths')) el('analysis-strengths').innerHTML = this.state.analysis.strengths.map(s => `<li class="flex items-center gap-3"><i data-lucide="check" class="w-4 h-4 text-accent-cyan"></i>${s}</li>`).join('');
-        if (el('analysis-gaps')) el('analysis-gaps').innerHTML = this.state.analysis.gaps.map(g => `<li class="flex items-center gap-3"><i data-lucide="minus" class="w-4 h-4 text-accent-lavender"></i>${g}</li>`).join('');
-        if (el('analysis-topics')) el('analysis-topics').innerHTML = this.state.analysis.topics.map(t => `<li class="flex items-center gap-3"><i data-lucide="circle-dot" class="w-4 h-4 text-brand-500"></i>${t}</li>`).join('');
+
+        // Render with pill backgrounds
+        const renderRequirement = (req, icon, iconColor) => `
+            <li class="flex items-start gap-2.5 p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs font-medium text-brand-900 leading-snug">
+                <i data-lucide="${icon}" class="w-3.5 h-3.5 ${iconColor} mt-0.5 shrink-0"></i>
+                ${req}
+            </li>
+        `;
+
+        if (el('analysis-strengths')) el('analysis-strengths').innerHTML = strengths.map(s => renderRequirement(s, 'check', 'text-[#63D5C4]')).join('');
+        if (el('analysis-gaps')) el('analysis-gaps').innerHTML = gaps.map(g => renderRequirement(g, 'minus', 'text-red-400')).join('');
+        if (el('analysis-topics')) el('analysis-topics').innerHTML = topics.map(t => renderRequirement(t, 'circle-dot', 'text-brand-500')).join('');
+
         if (el('job-input-section')) el('job-input-section').classList.add('hidden');
         if (el('analysis-results-section')) el('analysis-results-section').classList.remove('hidden');
         if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -643,6 +718,16 @@ window.app = {
         });
 
         return topics.slice(0, 3);
+    },
+
+    tryDifferentRole() {
+        this.state.job.description = '';
+        const jobInput = document.getElementById('job-desc-input');
+        if (jobInput) jobInput.value = '';
+        const jobSection = document.getElementById('job-input-section');
+        const resultsSection = document.getElementById('analysis-results-section');
+        if (jobSection) jobSection.classList.remove('hidden');
+        if (resultsSection) resultsSection.classList.add('hidden');
     },
 
     showModeSelection() { this.goToStage(3); },
