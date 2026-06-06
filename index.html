@@ -315,6 +315,10 @@
                                 <i data-lucide="book-open" class="w-4 h-4 text-slate-300 mr-3 mt-0.5 shrink-0"></i>
                                 <textarea id="courses-input" rows="2" class="bg-transparent w-full text-brand-900 font-bold placeholder:text-slate-300 outline-none resize-none text-sm" placeholder="Relevant courses (optional)"></textarea>
                             </div>
+                            <div class="input-pill flex items-start px-4 py-3.5 rounded-xl">
+                                <i data-lucide="briefcase" class="w-4 h-4 text-slate-300 mr-3 mt-0.5 shrink-0"></i>
+                                <textarea id="experience-input" rows="3" class="bg-transparent w-full text-brand-900 font-bold placeholder:text-slate-300 outline-none resize-none text-sm" placeholder="Previous experience (internships, projects, jobs) - optional"></textarea>
+                            </div>
                             <div class="input-pill flex items-center px-4 py-3.5 rounded-xl">
                                 <i data-lucide="linkedin" class="w-4 h-4 text-slate-300 mr-3 shrink-0"></i>
                                 <input type="url" id="linkedin-input" class="bg-transparent w-full text-brand-900 font-bold placeholder:text-slate-300 outline-none text-sm" placeholder="LinkedIn profile URL (optional)">
@@ -327,9 +331,28 @@
                                     <i data-lucide="chevron-down" id="cv-chevron" class="w-4 h-4 text-slate-300 transition-transform duration-200"></i>
                                 </button>
                                 <div id="cv-import-body" class="hidden px-4 pb-4 space-y-3 border-t border-slate-100 pt-3">
-                                    <p class="text-[10px] font-bold text-slate-400">Paste your CV/resume text below. We'll auto-fill your name, skills, and field.</p>
-                                    <div class="input-pill flex items-start px-4 py-3.5 rounded-xl">
-                                        <textarea id="cv-text-input" rows="5" class="bg-transparent w-full text-brand-900 font-bold placeholder:text-slate-300 outline-none resize-none text-sm" placeholder="Paste your CV or resume text here..."></textarea>
+                                    <p class="text-[10px] font-bold text-slate-400">Upload or paste your CV/resume. We'll auto-fill your skills, experience, and coursework.</p>
+                                    <div class="flex gap-2">
+                                        <button type="button" id="cv-tab-upload" onclick="window.app.switchCVTab('upload')" class="flex-1 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg bg-brand-500 text-white transition-colors">
+                                            <i data-lucide="upload-cloud" class="w-3 h-3 mr-1 inline"></i> Upload
+                                        </button>
+                                        <button type="button" id="cv-tab-paste" onclick="window.app.switchCVTab('paste')" class="flex-1 text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-lg bg-slate-100 text-slate-500 transition-colors">
+                                            <i data-lucide="clipboard" class="w-3 h-3 mr-1 inline"></i> Paste
+                                        </button>
+                                    </div>
+                                    <div id="cv-upload-panel" class="space-y-2">
+                                        <label for="cv-file-input" class="flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-6 cursor-pointer hover:border-brand-400 transition-colors gap-2 group">
+                                            <i data-lucide="upload-cloud" class="w-7 h-7 text-slate-300 group-hover:text-brand-400 transition-colors"></i>
+                                            <span class="text-xs font-bold text-slate-400">Drop your CV here or <span class="text-brand-500">browse</span></span>
+                                            <span class="text-[9px] text-slate-300 font-medium">PDF or .txt — 5MB max</span>
+                                        </label>
+                                        <input type="file" id="cv-file-input" accept=".pdf,.txt" class="sr-only" onchange="window.app.handleCVFileUpload(event)">
+                                        <p id="cv-upload-status" class="hidden text-[10px] text-slate-500 font-medium text-center"></p>
+                                    </div>
+                                    <div id="cv-paste-panel" class="hidden space-y-2">
+                                        <div class="input-pill flex items-start px-4 py-3.5 rounded-xl">
+                                            <textarea id="cv-text-input" rows="5" class="bg-transparent w-full text-brand-900 font-bold placeholder:text-slate-300 outline-none resize-none text-sm" placeholder="Paste your CV or resume text here..."></textarea>
+                                        </div>
                                     </div>
                                     <button type="button" onclick="window.app.autofillFromCV()" class="w-full py-2.5 rounded-xl border border-brand-500 text-brand-500 font-black text-xs uppercase tracking-widest hover:bg-brand-50 transition-all">
                                         <i data-lucide="wand-2" class="w-3.5 h-3.5 mr-1 inline"></i> Auto-fill from CV
@@ -449,35 +472,63 @@
                             <span class="text-[9px] font-black uppercase tracking-widest text-brand-500">Interview Mode</span>
                         </div>
                     </div>
-                    <div class="text-center mb-7">
+                    <div class="text-center mb-8">
                         <h2 class="text-3xl font-black text-brand-900 tracking-tighter">Choose Your Mode</h2>
                         <p class="text-slate-500 mt-1.5 text-sm font-medium">Pick the interview style that matches your goal.</p>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <button onclick="window.app.selectMode('hr')" class="feature-card text-left cursor-pointer">
-                            <div class="w-10 h-10 bg-[#EFF6FF] text-[#4F80FF] rounded-xl flex items-center justify-center mb-4"><i data-lucide="user-check" class="w-5 h-5"></i></div>
+                    <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-8">
+                        <p class="text-sm text-blue-900 leading-relaxed font-medium">You're about to start a 6-question mock interview with an AI interviewer. It will ask questions, respond to your answers, and give you feedback at the end.</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <button onclick="window.app.selectMode('hr')" id="mode-card-hr" class="mode-card feature-card text-left cursor-pointer relative">
+                            <span id="badge-hr" class="mode-recommended-badge hidden absolute -top-2 -right-2 bg-brand-500 text-white text-[9px] font-black px-2 py-1 rounded-full">Recommended</span>
+                            <div class="w-12 h-12 bg-[#EFF6FF] text-[#4F80FF] rounded-xl flex items-center justify-center mb-4"><i data-lucide="user-check" class="w-6 h-6"></i></div>
                             <h4 class="text-sm font-black text-brand-900 uppercase mb-1">HR Interview</h4>
-                            <p class="text-[10px] text-slate-400 font-bold">Behavioral & motivational. Great for soft skills.</p>
+                            <p class="text-xs text-slate-600 font-medium mb-3">Standard behavioral questions. 'Tell me about yourself', strengths/weaknesses, why this role.</p>
+                            <span class="text-[9px] text-slate-400 font-bold">~8 min</span>
+                            <div class="absolute bottom-4 right-4 w-6 h-6 rounded-full border-2 border-brand-500/20 flex items-center justify-center">
+                                <span class="text-[10px] text-brand-500 font-black">→</span>
+                            </div>
                         </button>
-                        <button onclick="window.app.selectMode('technical')" class="feature-card text-left cursor-pointer">
-                            <div class="w-10 h-10 bg-[#F5F3FF] text-[#A37BFF] rounded-xl flex items-center justify-center mb-4"><i data-lucide="code-2" class="w-5 h-5"></i></div>
+                        <button onclick="window.app.selectMode('technical')" id="mode-card-technical" class="mode-card feature-card text-left cursor-pointer relative">
+                            <span id="badge-technical" class="mode-recommended-badge hidden absolute -top-2 -right-2 bg-brand-500 text-white text-[9px] font-black px-2 py-1 rounded-full">Recommended</span>
+                            <div class="w-12 h-12 bg-[#F5F3FF] text-[#A37BFF] rounded-xl flex items-center justify-center mb-4"><i data-lucide="code-2" class="w-6 h-6"></i></div>
                             <h4 class="text-sm font-black text-brand-900 uppercase mb-1">Technical</h4>
-                            <p class="text-[10px] text-slate-400 font-bold">Deep dive into domain knowledge and problem-solving.</p>
+                            <p class="text-xs text-slate-600 font-medium mb-3">Domain-specific questions about your field. Focuses on what you know.</p>
+                            <span class="text-[9px] text-slate-400 font-bold">~8 min</span>
+                            <div class="absolute bottom-4 right-4 w-6 h-6 rounded-full border-2 border-brand-500/20 flex items-center justify-center">
+                                <span class="text-[10px] text-brand-500 font-black">→</span>
+                            </div>
                         </button>
-                        <button onclick="window.app.selectMode('case')" class="feature-card text-left cursor-pointer">
-                            <div class="w-10 h-10 bg-[#ECFDF5] text-[#10B981] rounded-xl flex items-center justify-center mb-4"><i data-lucide="briefcase" class="w-5 h-5"></i></div>
+                        <button onclick="window.app.selectMode('case')" id="mode-card-case" class="mode-card feature-card text-left cursor-pointer relative">
+                            <span id="badge-case" class="mode-recommended-badge hidden absolute -top-2 -right-2 bg-brand-500 text-white text-[9px] font-black px-2 py-1 rounded-full">Recommended</span>
+                            <div class="w-12 h-12 bg-[#ECFDF5] text-[#10B981] rounded-xl flex items-center justify-center mb-4"><i data-lucide="briefcase" class="w-6 h-6"></i></div>
                             <h4 class="text-sm font-black text-brand-900 uppercase mb-1">Case Study</h4>
-                            <p class="text-[10px] text-slate-400 font-bold">Strategic business scenarios and analytical thinking.</p>
+                            <p class="text-xs text-slate-600 font-medium mb-3">Open-ended business scenarios. How would you solve X?</p>
+                            <span class="text-[9px] text-slate-400 font-bold">~8 min</span>
+                            <div class="absolute bottom-4 right-4 w-6 h-6 rounded-full border-2 border-brand-500/20 flex items-center justify-center">
+                                <span class="text-[10px] text-brand-500 font-black">→</span>
+                            </div>
                         </button>
-                        <button onclick="window.app.selectMode('rapid')" class="feature-card text-left cursor-pointer">
-                            <div class="w-10 h-10 bg-[#FFF7ED] text-orange-500 rounded-xl flex items-center justify-center mb-4"><i data-lucide="zap" class="w-5 h-5"></i></div>
+                        <button onclick="window.app.selectMode('rapid')" id="mode-card-rapid" class="mode-card feature-card text-left cursor-pointer relative">
+                            <span id="badge-rapid" class="mode-recommended-badge hidden absolute -top-2 -right-2 bg-brand-500 text-white text-[9px] font-black px-2 py-1 rounded-full">Recommended</span>
+                            <div class="w-12 h-12 bg-[#FFF7ED] text-orange-500 rounded-xl flex items-center justify-center mb-4"><i data-lucide="zap" class="w-6 h-6"></i></div>
                             <h4 class="text-sm font-black text-brand-900 uppercase mb-1">Rapid Fire</h4>
-                            <p class="text-[10px] text-slate-400 font-bold">Fast-paced short answers. Tests clarity under pressure.</p>
+                            <p class="text-xs text-slate-600 font-medium mb-3">Short, fast questions. One after another. Pressure test.</p>
+                            <span class="text-[9px] text-slate-400 font-bold">~8 min</span>
+                            <div class="absolute bottom-4 right-4 w-6 h-6 rounded-full border-2 border-brand-500/20 flex items-center justify-center">
+                                <span class="text-[10px] text-brand-500 font-black">→</span>
+                            </div>
                         </button>
-                        <button onclick="window.app.selectMode('friendly')" class="feature-card text-left cursor-pointer">
-                            <div class="w-10 h-10 bg-[#FFF0F6] text-pink-500 rounded-xl flex items-center justify-center mb-4"><i data-lucide="heart" class="w-5 h-5"></i></div>
+                        <button onclick="window.app.selectMode('friendly')" id="mode-card-friendly" class="mode-card feature-card text-left cursor-pointer relative md:col-span-2 md:col-start-1">
+                            <span id="badge-friendly" class="mode-recommended-badge hidden absolute -top-2 -right-2 bg-brand-500 text-white text-[9px] font-black px-2 py-1 rounded-full">Recommended</span>
+                            <div class="w-12 h-12 bg-[#FFF0F6] text-pink-500 rounded-xl flex items-center justify-center mb-4"><i data-lucide="heart" class="w-6 h-6"></i></div>
                             <h4 class="text-sm font-black text-brand-900 uppercase mb-1">Friendly</h4>
-                            <p class="text-[10px] text-slate-400 font-bold">Relaxed and supportive. Perfect for first-timers.</p>
+                            <p class="text-xs text-slate-600 font-medium mb-3">Relaxed conversation style. Ideal if it's your first time practicing.</p>
+                            <span class="text-[9px] text-slate-400 font-bold">~8 min</span>
+                            <div class="absolute bottom-4 right-4 w-6 h-6 rounded-full border-2 border-brand-500/20 flex items-center justify-center">
+                                <span class="text-[10px] text-brand-500 font-black">→</span>
+                            </div>
                         </button>
                     </div>
                 </div>
@@ -628,60 +679,135 @@
 
             <!-- 7. Dashboard -->
             <section id="dashboard-view" class="view">
-                <div class="max-w-3xl mx-auto w-full space-y-4">
+                <div class="max-w-4xl mx-auto w-full space-y-6">
 
-                    <!-- Profile Card -->
-                    <div class="bg-white rounded-2xl p-6 shadow-soft border border-slate-100">
-                        <div class="flex items-start gap-5">
-                            <div class="w-14 h-14 bg-brand-900 text-white rounded-xl flex items-center justify-center text-lg font-black shrink-0" id="user-initials-dash">U</div>
-                            <div class="flex-1 min-w-0">
-                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Your Profile</p>
-                                <h2 id="dash-user-name" class="text-xl font-black text-brand-900 tracking-tighter truncate">User</h2>
-                                <p id="dash-user-field" class="text-slate-400 font-medium text-xs mt-0.5 truncate"></p>
-                                <div id="dash-skills-tags" class="flex flex-wrap gap-1.5 mt-2"></div>
-                                <a id="dash-linkedin-link" href="#" target="_blank" rel="noopener noreferrer"
-                                   class="hidden items-center gap-1.5 mt-2 text-[10px] font-bold text-brand-500 hover:underline">
-                                    <i data-lucide="linkedin" class="w-3 h-3"></i>
-                                    <span id="dash-linkedin-text">LinkedIn Profile</span>
-                                </a>
+                    <!-- Header: Welcome & Quick Actions -->
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Welcome back</p>
+                            <h1 id="dash-user-name" class="text-3xl font-black text-brand-900 tracking-tighter">User</h1>
+                        </div>
+                        <button onclick="window.app.goToStage(2)" class="btn-gradient text-white font-black px-6 py-3 rounded-xl shadow-sm text-xs uppercase tracking-wide">
+                            <i data-lucide="plus" class="w-4 h-4 mr-1.5 inline"></i> Start New Interview
+                        </button>
+                    </div>
+
+                    <!-- Main Content Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                        <!-- Left Column: Profile Summary -->
+                        <div class="lg:col-span-1 space-y-4">
+                            <!-- Profile Card -->
+                            <div class="bg-white rounded-2xl p-6 shadow-soft border border-slate-100">
+                                <div class="flex flex-col items-center text-center gap-3 mb-5">
+                                    <div class="w-16 h-16 bg-brand-900 text-white rounded-2xl flex items-center justify-center text-2xl font-black shrink-0" id="user-initials-dash">U</div>
+                                    <div class="w-full min-w-0">
+                                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Your Profile</p>
+                                        <h2 class="text-lg font-black text-brand-900 tracking-tighter truncate" id="dash-full-name">User</h2>
+                                        <p id="dash-user-field" class="text-slate-400 font-bold text-xs mt-1 line-clamp-2"></p>
+                                    </div>
+                                </div>
+                                <div class="border-t border-slate-100 pt-4 space-y-3">
+                                    <!-- Skills -->
+                                    <div>
+                                        <p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-2">Skills</p>
+                                        <div id="dash-skills-tags" class="flex flex-wrap gap-1.5 justify-center"></div>
+                                        <p id="dash-no-skills" class="text-[10px] text-slate-300 text-center italic">No skills added yet</p>
+                                    </div>
+                                    <!-- LinkedIn -->
+                                    <a id="dash-linkedin-link" href="#" target="_blank" rel="noopener noreferrer"
+                                       class="hidden flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors">
+                                        <i data-lucide="linkedin" class="w-3.5 h-3.5 text-brand-500"></i>
+                                        <span class="text-[10px] font-bold text-brand-500 line-clamp-1" id="dash-linkedin-text">LinkedIn</span>
+                                    </a>
+                                </div>
+                                <button onclick="window.app.openEditProfile()" class="w-full mt-4 py-2.5 px-3 rounded-lg border border-slate-100 text-slate-600 font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-colors">
+                                    Edit Profile
+                                </button>
                             </div>
-                            <button onclick="window.app.goToStage(2)" class="btn-gradient text-white font-black px-5 py-2.5 rounded-xl shadow-sm text-xs uppercase tracking-wide shrink-0">
-                                New Session <i data-lucide="plus" class="w-3.5 h-3.5 ml-1 inline"></i>
+
+                            <!-- Experience Card (if available) -->
+                            <div id="dash-experience" class="hidden bg-white rounded-2xl p-5 shadow-soft border border-slate-100">
+                                <p class="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                                    <i data-lucide="briefcase" class="w-3.5 h-3.5"></i> Experience
+                                </p>
+                                <p id="dash-experience-text" class="text-xs text-slate-600 leading-relaxed font-medium line-clamp-4"></p>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Activity & Recommendations -->
+                        <div class="lg:col-span-2 space-y-4">
+                            <!-- Next Steps -->
+                            <div class="bg-gradient-to-br from-brand-50 to-slate-50 rounded-2xl p-6 border border-brand-100">
+                                <p class="text-[9px] font-black text-brand-500 uppercase tracking-widest mb-3">Recommended Next Steps</p>
+                                <div class="space-y-2.5">
+                                    <div class="flex items-start gap-3">
+                                        <div class="w-6 h-6 rounded-lg bg-white border-2 border-brand-200 flex items-center justify-center shrink-0 mt-0.5">
+                                            <i data-lucide="file-text" class="w-3 h-3 text-brand-500"></i>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <p class="text-sm font-bold text-brand-900">Paste a job description</p>
+                                            <p class="text-[10px] text-slate-600 font-medium">Get personalized interview insights</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-start gap-3">
+                                        <div class="w-6 h-6 rounded-lg bg-white border-2 border-brand-200 flex items-center justify-center shrink-0 mt-0.5">
+                                            <i data-lucide="mic" class="w-3 h-3 text-brand-500"></i>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <p class="text-sm font-bold text-brand-900">Practice mock interviews</p>
+                                            <p class="text-[10px] text-slate-600 font-medium">Choose your interview mode and get started</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-start gap-3">
+                                        <div class="w-6 h-6 rounded-lg bg-white border-2 border-brand-200 flex items-center justify-center shrink-0 mt-0.5">
+                                            <i data-lucide="zap" class="w-3 h-3 text-brand-500"></i>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <p class="text-sm font-bold text-brand-900">Review your feedback</p>
+                                            <p class="text-[10px] text-slate-600 font-medium">Check session history below and improve</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Session History / Activity -->
+                            <div class="bg-white rounded-2xl p-6 shadow-soft border border-slate-100">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h3 class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Session History</h3>
+                                    <button onclick="window.app.goToStage(2)" class="text-[9px] font-bold text-brand-500 hover:underline uppercase tracking-widest">
+                                        New Interview <i data-lucide="plus" class="w-3 h-3 ml-1 inline"></i>
+                                    </button>
+                                </div>
+                                <div id="session-history-list" class="space-y-2.5">
+                                </div>
+                                <div id="dash-session-empty-cta" class="hidden">
+                                    <div class="flex flex-col items-center justify-center py-8 px-4 text-center">
+                                        <div class="w-12 h-12 bg-brand-50 rounded-xl flex items-center justify-center mb-3">
+                                            <i data-lucide="play-circle" class="w-6 h-6 text-brand-500"></i>
+                                        </div>
+                                        <p class="text-sm font-black text-brand-900">No sessions yet</p>
+                                        <p class="text-[10px] text-slate-400 font-medium mt-1">Ready to practice?</p>
+                                        <button onclick="window.app.goToStage(2)" class="mt-4 w-full btn-gradient text-white font-black py-2.5 rounded-lg text-xs uppercase tracking-widest">
+                                            Start Your First Interview
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Account Settings Section -->
+                    <div class="border-t border-slate-200 pt-6">
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4">Account</p>
+                        <div class="flex items-center gap-3">
+                            <button onclick="window.app.signOut()" class="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-slate-200 text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-colors">
+                                <i data-lucide="log-out" class="w-3.5 h-3.5"></i> Sign Out
+                            </button>
+                            <button onclick="window.app.deleteAccount()" id="delete-account-btn" class="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-red-200 text-red-500 font-black text-[10px] uppercase tracking-widest hover:bg-red-50 transition-colors">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete
                             </button>
                         </div>
-                    </div>
-
-                    <!-- Session History -->
-                    <div class="bg-white rounded-2xl p-6 shadow-soft border border-slate-100">
-                        <h3 class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4">Session History</h3>
-                        <div id="session-history-list" class="space-y-3">
-                        </div>
-                        <div id="dash-session-empty-cta" class="hidden">
-                            <a onclick="window.app.goToStage(2)" class="flex items-center justify-between p-5 rounded-xl border-2 border-dashed border-brand-200 hover:border-brand-500 hover:bg-brand-50 transition-all cursor-pointer group">
-                                <div>
-                                    <p class="text-sm font-black text-brand-900 tracking-tight">Ready to practice?</p>
-                                    <p class="text-xs font-bold text-slate-400 mt-0.5">Start your first mock interview</p>
-                                </div>
-                                <div class="w-10 h-10 bg-brand-500 text-white rounded-xl flex items-center justify-center group-hover:scale-105 transition-transform">
-                                    <i data-lucide="arrow-right" class="w-5 h-5"></i>
-                                </div>
-                            </a>
-                        </div>
-                    </div>
-
-                    <!-- Account Actions -->
-                    <button onclick="window.app.openEditProfile()" class="feature-card text-left cursor-pointer w-full">
-                        <div class="w-9 h-9 bg-blue-50 text-brand-500 rounded-lg flex items-center justify-center mb-3"><i data-lucide="user-pen" class="w-4 h-4"></i></div>
-                        <h4 class="text-xs font-black text-brand-900 uppercase">Update Profile</h4>
-                        <p class="text-[10px] text-slate-400 font-bold mt-1">Edit your skills, LinkedIn, and focus area.</p>
-                    </button>
-                    <div class="flex items-center gap-3 pt-2">
-                        <button onclick="window.app.signOut()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-100 text-slate-400 font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all">
-                            <i data-lucide="log-out" class="w-3.5 h-3.5"></i> Sign Out
-                        </button>
-                        <button onclick="window.app.deleteAccount()" id="delete-account-btn" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-red-100 text-red-400 font-black text-xs uppercase tracking-widest hover:bg-red-50 transition-all">
-                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Delete Account
-                        </button>
                     </div>
                 </div>
             </section>
