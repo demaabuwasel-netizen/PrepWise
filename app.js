@@ -1,19 +1,209 @@
-const STAGE_HASHES = ['', '#profile', '#analysis', '#mode', '#interview', '#report', '#practice', '#dashboard'];
+const STAGE_HASHES = ['', '#dashboard', '#profile', '#setup', '#interview', '#completion', '#report', '#practice', '#history'];
 const HASH_TO_STAGE = Object.fromEntries(STAGE_HASHES.map((h, i) => [h, i]).filter(([h]) => h));
 
 window.app = {
+    // --- AI Intelligence Core (Ollama Integration) ---
+    async callModelAPI(promptOrMessages, systemInstruction = "", isJson = false) {
+        // Handle native message array or fallback to single string prompt
+        let messagesArray = [];
+        if (Array.isArray(promptOrMessages)) {
+            messagesArray = promptOrMessages;
+        } else {
+            messagesArray = [{ role: "user", content: promptOrMessages }];
+        }
+        
+        // Prepend System Instruction
+        if (systemInstruction) {
+            messagesArray.unshift({ role: "system", content: systemInstruction });
+        }
+
+        const model = this.getModelForMode();
+        const url = 'http://localhost:11434/api/chat';
+        
+        const body = {
+            model: model,
+            messages: messagesArray,
+            stream: false,
+            options: {
+                temperature: isJson ? 0.1 : 0.7,
+                num_predict: 2048
+            }
+        };
+
+        if (isJson) {
+            body.format = 'json';
+        }
+
+        try {
+            const response = await fetch(url, { 
+                method: 'POST', 
+                headers: { 
+                    'Content-Type': 'application/json'
+                }, 
+                body: JSON.stringify(body) 
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Ollama Error: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return data.message?.content || this.getMockAIResponse(JSON.stringify(messagesArray));
+        } catch (error) {
+            console.error("Ollama Connection Error, falling back to Mock AI:", error);
+            return this.getMockAIResponse(JSON.stringify(messagesArray));
+        }
+    },
+
+    getModelForMode() {
+        const mode = this.state.interviewMode;
+        switch(mode) {
+            case 'technical':
+            case 'case':
+                return 'qwen3:14b'; // Best for reasoning and technical
+            case 'friendly':
+                return 'gemma3:12b'; // Best for conversational
+            case 'rapid':
+                return 'qwen3:8b'; // Fast for rapid fire
+            case 'hr':
+            default:
+                return 'qwen3:14b'; // Balanced for HR
+        }
+    },
+
+    getInterviewSystemPrompt() {
+        const moodPrompts = {
+            'professional': 'Maintain a formal, professional, and slightly reserved tone. Act like a senior recruiter at a Fortune 500 company.',
+            'friendly': 'Maintain a warm, encouraging, and supportive tone. Act like a helpful mentor or a friendly peer.',
+            'hard': 'Maintain a challenging, skeptical, and high-pressure tone. Ask tough follow-up questions and drill down into every detail. Act like a demanding technical lead.',
+            'casual': 'Maintain a relaxed, informal, and conversational tone. Use "tech-bro" or startup-style language. Act like you are meeting for coffee.'
+        };
+        const moodInstruction = moodPrompts[this.state.interviewerMood] || moodPrompts['professional'];
+
+        return `
+            You are the AI Interviewer for a mock interview training platform.
+            Your goal is to conduct a realistic, human-like, and highly conversational interview.
+
+            MOOD/PERSONALITY: ${moodInstruction}
+
+            JOB DESCRIPTION: ${this.state.job.description}
+            STUDENT PROFILE: ${this.state.user.name} - ${this.state.user.field}
+            INTERVIEW TYPE: ${this.state.interviewMode}
+
+            STRICT BEHAVIOR RULES:
+            1. You are engaging in a back-and-forth conversation. You are reading the full conversation history.
+            2. ALWAYS base your next question directly on the student's LAST answer. 
+            3. Acknowledge what they just said naturally before asking the next question (e.g., "That makes sense. When you mentioned...").
+            4. Ask ONLY ONE question at a time.
+            5. DO NOT REPEAT previous questions or topics. Keep the conversation moving forward or deeper.
+            6. If an answer is vague, ask for a specific example. If it is detailed, probe deeper into a specific technical or behavioral point they mentioned.
+            7. Do not act like a robot running down a checklist. Act like a senior hiring manager having a natural dialogue.
+            8. Output ONLY your next spoken message to the student. Do not output internal thoughts, JSON, or formatting.
+        `;
+    },
+
+    // --- Mock AI for Demo Mode (No API Key Required) ---
+    getMockAIResponse(prompt) {
+        console.log("Using Mock AI Response for prompt:", prompt.substring(0, 100) + "...");
+        const p = prompt.toLowerCase();
+        
+        // 1. Mock Job Profile Analysis
+        if (p.includes('job description') && p.includes('match')) {
+            return JSON.stringify({
+                "matchScore": 82,
+                "strengths": ["Technical Knowledge", "Problem Solving", "Experience"],
+                "gaps": ["Specific Frameworks", "System Design"],
+                "topics": ["Algorithm Optimization", "Team Collaboration"],
+                "difficulty": "Moderate"
+            });
+        }
+
+        // 2. Mock Report (Priority)
+        if (p.includes('career coach') && p.includes('transcript')) {
+            return JSON.stringify({
+                "score": 8,
+                "strengths": ["Clear communication", "Practical examples", "Good technical foundation"],
+                "improvements": ["Be more specific about metrics", "Structure the STAR method better", "elaborate on trade-offs"],
+                "bestAnswer": "Your explanation of the React state management was very clear.",
+                "weakestAnswer": "The answer about teamwork could have used a more concrete example.",
+                "starExample": "In my React project, users were losing data on refresh. I implemented local storage sync. This reduced data loss complaints by 90%."
+            });
+        }
+
+        // 3. Mock Practice Question & Feedback
+        if (p.includes('practicing') || p.includes('evaluation')) {
+            return "That was a solid improvement! You addressed the core of the question much more clearly this time. One thing you did well was linking your past experience directly to the challenge. To make it even stronger, try to include a specific metric or result next time.";
+        }
+        if (p.includes('practice') && (p.includes('weakest area') || p.includes('weakness'))) {
+            const area = this.state.currentPracticeWeakness || "Communication";
+            return `I noticed that ${area} is an area you want to work on. Can you tell me about a time when you struggled with this, and what you did to overcome it?`;
+        }
+
+        // 4. Mock Report (Fallback)
+        if (p.includes('report')) {
+            return JSON.stringify({
+                "score": 8,
+                "strengths": ["Clear communication", "Practical examples", "Good technical foundation"],
+                "improvements": ["Be more specific about metrics", "Structure the STAR method better", "elaborate on trade-offs"],
+                "bestAnswer": "Your explanation of the React state management was very clear.",
+                "weakestAnswer": "The answer about teamwork could have used a more concrete example.",
+                "starExample": "In my React project, users were losing data on refresh. I implemented local storage sync. This reduced data loss complaints by 90%."
+            });
+        }
+
+        // 4. Mock Interviewer Generator
+        if (p.includes('start the interview') || this.state.interview.transcript.length === 0) {
+            return "Hi! It's great to meet you today. To start things off, could you tell me a bit about your background and what specifically interests you about this role?";
+        }
+        
+        const followups = [
+            "That's interesting. You mentioned working on the frontend — what was one specific feature you built that you're proud of?",
+            "I see. When you said authentication was difficult, what exactly made it a challenge for you?",
+            "Before we move on, I'd like to understand your role in that project more clearly. What were your main responsibilities?",
+            "Got it. Can you walk me through a specific time when you had to debug a difficult problem in that system?"
+        ];
+        return followups[Math.floor(Math.random() * followups.length)];
+    },
+
     state: {
         currentStage: 0,
         interviewMode: 'hr',
+        interviewerMood: 'professional',
         isGuest: false,
         isEditingProfile: false,
         currentUser: null,
+        wizard: { step: 1, goal: 'specific', jobDesc: '', style: 'hr', mood: 'professional', method: 'text' },
         user: { name: '', email: '', field: 'Software Engineering', skills: '', courses: '', experience: '', linkedin: '' },
         job: { description: '', link: '' },
         analysis: { matchScore: 0, difficulty: 'Moderate', strengths: [], gaps: [], topics: [] },
         interview: {
-            currentQuestionIndex: 0, questions: [], responses: [],
-            startTime: null, isListening: false, awaitingFollowUp: false
+            currentQuestionIndex: 0,
+            questions: [],
+            responses: [],
+            startTime: null,
+            isListening: false,
+            awaitingFollowUp: false,
+
+            // New Stateful Logic Fields
+            currentPhase: 'opening',
+            currentTopic: 'introduction',
+            previousQuestion: '',
+            latestAnswer: '',
+            transcript: [],
+            plan: [],
+            transcriptSummary: '',
+            studentFactsMentioned: [],
+            openFollowUps: [],
+            coveredTopics: [],
+            unansweredPoints: [],
+            askedQuestions: [],
+            answerQuality: {
+                answeredQuestion: 'unclear',
+                specificity: 'okay',
+                relevance: 'strong',
+                confidence: 'medium'
+            },
+            nextAction: 'ask_follow_up'
         },
         transcriptState: { final: '', interim: '', isEditing: false },
         sessions: []
@@ -27,20 +217,23 @@ window.app = {
         this.checkAuth();
         this.initRouting();
         this.setupPopstateListener();
+        if (typeof Logger !== 'undefined') Logger.startMouseTracking();
         if (typeof lucide !== 'undefined') lucide.createIcons();
     },
 
     cacheDOM() {
         this.views = {
             auth: document.getElementById('auth-view'),
-            onboarding: document.getElementById('onboarding-view'),
-            analysis: document.getElementById('analysis-view'),
-            modeSelection: document.getElementById('mode-selection-view'),
-            interview: document.getElementById('interview-view'),
-            feedback: document.getElementById('feedback-view'),
-            practice: document.getElementById('practice-view'),
-            dashboard: document.getElementById('dashboard-view')
+            dashboard: document.getElementById('view-dashboard'),
+            profile: document.getElementById('view-profile'),
+            setup: document.getElementById('view-setup'),
+            interview: document.getElementById('view-interview'),
+            completion: document.getElementById('view-completion'),
+            report: document.getElementById('view-report'),
+            practice: document.getElementById('view-practice'),
+            history: document.getElementById('view-history')
         };
+        this.nav = document.getElementById('app-nav');
         this.forms = {
             auth: document.getElementById('auth-form'),
             profile: document.getElementById('profile-form'),
@@ -62,8 +255,6 @@ window.app = {
     },
 
     populateFocusAreas() {
-        const select = document.getElementById('field-select');
-        if (!select) return;
         const areas = [
             "Software Engineering", "Artificial Intelligence", "Cybersecurity", "Cloud / DevOps", "Networking",
             "Information Systems", "Game Development", "Data Science", "Statistics", "Mathematics",
@@ -73,7 +264,11 @@ window.app = {
             "Industrial Engineering", "Mechanical Engineering", "Electrical Engineering", "Civil Engineering",
             "Architecture", "Education", "UX Research", "Graphic Design"
         ];
-        select.innerHTML = areas.map(a => `<option value="${a}">${a}</option>`).join('');
+        
+        const selects = ['field-select', 'prof-field'].map(id => document.getElementById(id)).filter(Boolean);
+        selects.forEach(select => {
+            select.innerHTML = areas.map(a => `<option value="${a}">${a}</option>`).join('');
+        });
     },
 
     // --- Modal & Theme ---
@@ -140,43 +335,52 @@ window.app = {
                 loader.classList.add('hidden'); loader.classList.remove('flex');
                 this.state.user.name = provider === 'Google' ? 'Google Candidate' : 'GitHub Developer';
                 this.state.user.email = provider.toLowerCase() + '@simulation.edu';
-                this.state.currentUser = { email: this.state.user.email, profile: this.state.user, sessions: [] };
-                localStorage.setItem('prepwise_session_v2', JSON.stringify(this.state.currentUser));
+                this.state.currentUser = { email: this.state.user.email, profile: this.state.user, sessions: [], isGuest: false };
+                localStorage.setItem('prepwise_session_v3', JSON.stringify(this.state.currentUser));
                 this.updateUserUI();
-                this.goToStage(1);
+                this.showDashboard();
             }, 2000);
         }
     },
 
     // --- Auth ---
     checkAuth() {
-        const session = localStorage.getItem('prepwise_session_v2');
+        const session = localStorage.getItem('prepwise_session_v3');
         if (session) {
             try {
                 const data = JSON.parse(session);
                 this.state.currentUser = data;
                 this.state.user = data.profile || this.state.user;
                 this.state.sessions = data.sessions || [];
+                this.state.isGuest = data.isGuest || false;
                 this.updateUserUI();
-                if (data.profile) { this.showDashboard(); } else { this._navigateToStage(1); }
+                this.showDashboard();
             } catch(e) {
-                localStorage.removeItem('prepwise_session_v2');
-                this._navigateToStage(0);
+                this.goToStage(0);
             }
         } else {
-            this._navigateToStage(0);
+            this.goToStage(0);
         }
+    },
+
+    continueAsGuest() {
+        this.createGuestSession();
+    },
+
+    createGuestSession() {
+        this.state.isGuest = true;
+        this.state.user = { name: 'Guest User', email: 'guest@prepwise.ai', field: 'Software Engineering', skills: 'React, Node', courses: '', experience: '', linkedin: '' };
+        this.state.currentUser = { email: this.state.user.email, profile: this.state.user, sessions: [], isGuest: true };
+        localStorage.setItem('prepwise_session_v3', JSON.stringify(this.state.currentUser));
+        this.updateUserUI();
+        this.showDashboard();
     },
 
     initRouting() {
         const hash = window.location.hash;
         const stage = HASH_TO_STAGE[hash];
         if (stage && this.state.currentUser) {
-            if (stage === 4 || stage === 6) {
-                this._navigateToStage(7);
-            } else {
-                this._navigateToStage(stage);
-            }
+            this._navigateToStage(stage);
         }
         history.replaceState({ stage: this.state.currentStage }, '', window.location.hash || '');
     },
@@ -185,14 +389,6 @@ window.app = {
         window.addEventListener('popstate', (e) => {
             if (e.state && typeof e.state.stage === 'number') {
                 const target = e.state.stage;
-                if (target === 4 && this.state.interview.responses.length === 0) {
-                    this._navigateToStage(3);
-                    return;
-                }
-                if (target === 0 && this.state.currentUser) {
-                    this._navigateToStage(7);
-                    return;
-                }
                 this._navigateToStage(target);
             } else {
                 const hash = window.location.hash;
@@ -200,7 +396,7 @@ window.app = {
                 if (stage !== undefined && this.state.currentUser) {
                     this._navigateToStage(stage);
                 } else {
-                    this._navigateToStage(this.state.currentUser ? 7 : 0);
+                    this._navigateToStage(0);
                 }
             }
         });
@@ -213,87 +409,72 @@ window.app = {
         const email = emailEl.value.trim();
         if (!email) return;
         const isSignUp = btn && btn.dataset.mode === 'signup';
-        let users = JSON.parse(localStorage.getItem('prepwise_users_v2') || '{}');
+        let users = JSON.parse(localStorage.getItem('prepwise_users_v3') || '{}');
         if (isSignUp) {
             if (users[email]) return alert("An account already exists for this email. Please sign in.");
             users[email] = { profile: null, sessions: [] };
-            localStorage.setItem('prepwise_users_v2', JSON.stringify(users));
+            localStorage.setItem('prepwise_users_v3', JSON.stringify(users));
         } else {
             if (!users[email]) {
                 users[email] = { profile: null, sessions: [] };
-                localStorage.setItem('prepwise_users_v2', JSON.stringify(users));
+                localStorage.setItem('prepwise_users_v3', JSON.stringify(users));
             }
         }
-        this.state.currentUser = { email, ...users[email] };
-        localStorage.setItem('prepwise_session_v2', JSON.stringify(this.state.currentUser));
+        this.state.currentUser = { email, ...users[email], isGuest: false };
+        localStorage.setItem('prepwise_session_v3', JSON.stringify(this.state.currentUser));
         if (this.state.currentUser.profile) {
             this.state.user = this.state.currentUser.profile;
             this.state.sessions = this.state.currentUser.sessions || [];
             this.updateUserUI();
             this.showDashboard();
         } else {
-            this.goToStage(1);
+            this.showDashboard();
         }
     },
 
     handleProfileSubmit() {
-        const nameEl = document.getElementById('name-input');
-        const fieldEl = document.getElementById('field-select');
-        const skillsEl = document.getElementById('skills-input');
-        const coursesEl = document.getElementById('courses-input');
-        const experienceEl = document.getElementById('experience-input');
-        const linkedinEl = document.getElementById('linkedin-input');
+        this.saveProfile();
+    },
+
+    saveProfile() {
+        const nameEl = document.getElementById('prof-name');
+        const fieldEl = document.getElementById('prof-field');
+        const skillsEl = document.getElementById('prof-skills');
+        const coursesEl = document.getElementById('prof-courses');
+        const experienceEl = document.getElementById('prof-experience');
+        const linkedinEl = document.getElementById('prof-linkedin');
+        
         this.state.user.name = nameEl ? nameEl.value.trim() : '';
-        this.state.user.field = fieldEl ? fieldEl.value : 'Software Engineering';
+        this.state.user.field = fieldEl ? fieldEl.value.trim() : 'Software Engineering';
         this.state.user.skills = skillsEl ? skillsEl.value.trim() : '';
         this.state.user.courses = coursesEl ? coursesEl.value.trim() : '';
         this.state.user.experience = experienceEl ? experienceEl.value.trim() : '';
         this.state.user.linkedin = linkedinEl ? linkedinEl.value.trim() : '';
-        const wasEditing = this.state.isEditingProfile;
-        this.state.isEditingProfile = false;
+        
         this.saveUserData();
         this.updateUserUI();
-        if (wasEditing) {
-            this.showDashboard();
-        } else {
-            this.showDashboard();
-        }
+        this.showDashboard();
     },
 
     openEditProfile() {
-        this.state.isEditingProfile = true;
-        const u = this.state.user;
-        const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-        set('name-input', u.name);
-        set('field-select', u.field || 'Software Engineering');
-        if (!document.getElementById('field-select').value) document.getElementById('field-select').value = 'Software Engineering';
-        set('skills-input', u.skills);
-        set('courses-input', u.courses);
-        set('experience-input', u.experience);
-        set('linkedin-input', u.linkedin);
-        this.goToStage(1);
-        this.updateOnboardingUI();
+        const nameEl = document.getElementById('prof-name');
+        const fieldEl = document.getElementById('prof-field');
+        const skillsEl = document.getElementById('prof-skills');
+        const coursesEl = document.getElementById('prof-courses');
+        const experienceEl = document.getElementById('prof-experience');
+        const linkedinEl = document.getElementById('prof-linkedin');
+
+        if (nameEl) nameEl.value = this.state.user.name || '';
+        if (fieldEl) fieldEl.value = this.state.user.field || '';
+        if (skillsEl) skillsEl.value = this.state.user.skills || '';
+        if (coursesEl) coursesEl.value = this.state.user.courses || '';
+        if (experienceEl) experienceEl.value = this.state.user.experience || '';
+        if (linkedinEl) linkedinEl.value = this.state.user.linkedin || '';
+        
+        this.goToStage(2);
     },
 
     updateOnboardingUI() {
-        const isEdit = this.state.isEditingProfile;
-        const title = document.getElementById('onboarding-title');
-        const subtitle = document.getElementById('onboarding-subtitle');
-        const stepper = document.getElementById('onboarding-stepper');
-        const backBtn = document.getElementById('onboarding-back-btn');
-        const submitBtn = document.getElementById('onboarding-submit-btn');
-
-        if (title) title.textContent = isEdit ? 'Edit Your Profile' : 'Your Profile';
-        if (subtitle) subtitle.textContent = isEdit ? 'Update your details below.' : 'Help us personalize your experience.';
-        if (stepper) stepper.classList.toggle('hidden', isEdit);
-        if (backBtn) {
-            backBtn.textContent = isEdit ? '← Back to Dashboard' : '← Back';
-            backBtn.onclick = isEdit ? (() => { this.state.isEditingProfile = false; this.showDashboard(); }) : (() => this.goBack());
-        }
-        if (submitBtn) {
-            submitBtn.innerHTML = isEdit ? 'Save Changes <i data-lucide="check" class="w-4 h-4 ml-1 inline"></i>' : 'Continue <i data-lucide="arrow-right" class="w-4 h-4 ml-1 inline"></i>';
-        }
-        if (typeof lucide !== 'undefined') lucide.createIcons();
     },
 
     toggleCVImport() {
@@ -303,6 +484,65 @@ window.app = {
         const isOpen = !body.classList.contains('hidden');
         body.classList.toggle('hidden', isOpen);
         if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
+    },
+
+    switchCVTab(tab) {
+        const isUpload = tab === 'upload';
+        const uploadPanel = document.getElementById('cv-upload-panel');
+        const pastePanel = document.getElementById('cv-paste-panel');
+        const tabUpload = document.getElementById('cv-tab-upload');
+        const tabPaste = document.getElementById('cv-tab-paste');
+        
+        if (uploadPanel) uploadPanel.classList.toggle('hidden', !isUpload);
+        if (pastePanel) pastePanel.classList.toggle('hidden', isUpload);
+        
+        if (tabUpload) {
+            tabUpload.classList.toggle('border-brand-500', isUpload);
+            tabUpload.classList.toggle('text-brand-600', isUpload);
+            tabUpload.classList.toggle('border-transparent', !isUpload);
+            tabUpload.classList.toggle('text-slate-400', !isUpload);
+        }
+        if (tabPaste) {
+            tabPaste.classList.toggle('border-brand-500', !isUpload);
+            tabPaste.classList.toggle('text-brand-600', !isUpload);
+            tabPaste.classList.toggle('border-transparent', isUpload);
+            tabPaste.classList.toggle('text-slate-400', isUpload);
+        }
+    },
+
+    async handleCVUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const nameEl = document.getElementById('cv-file-name');
+        const parseBtn = document.getElementById('btn-parse-pdf');
+        
+        if (nameEl) {
+            nameEl.textContent = file.name;
+            nameEl.classList.remove('hidden');
+        }
+        if (parseBtn) parseBtn.disabled = false;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const typedarray = new Uint8Array(e.target.result);
+            try {
+                const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                let fullText = "";
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(" ");
+                    fullText += pageText + "\n";
+                }
+                this._pendingCVText = fullText;
+                console.log("PDF text extracted successfully.");
+            } catch (err) {
+                console.error("Error parsing PDF:", err);
+                alert("Failed to parse PDF. Please try pasting the text instead.");
+            }
+        };
+        reader.readAsArrayBuffer(file);
     },
 
     autofillFromCV() {
@@ -344,6 +584,12 @@ window.app = {
                         <select id="cv-review-field" class="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:border-brand-500 focus:outline-none">
                             <option>${parsed.field || 'Select field'}</option>
                         </select>
+                    </div>
+
+                    <!-- LinkedIn -->
+                    <div>
+                        <label class="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">LinkedIn URL</label>
+                        <input type="url" id="cv-review-linkedin" class="w-full px-4 py-2.5 border border-slate-200 rounded-lg focus:border-brand-500 focus:outline-none" value="${parsed.linkedin || ''}" placeholder="https://linkedin.com/in/yourprofile">
                     </div>
 
                     <!-- Skills -->
@@ -430,20 +676,26 @@ window.app = {
         const skills = document.getElementById('cv-review-skills')?.value || '';
         const experience = document.getElementById('cv-review-experience')?.value || '';
         const courses = document.getElementById('cv-review-courses')?.value || '';
-        const education = document.getElementById('cv-review-education')?.value || '';
+        const linkedin = document.getElementById('cv-review-linkedin')?.value || '';
 
-        // Apply to form fields
-        const nameEl = document.getElementById('name-input');
-        const fieldEl = document.getElementById('field-select');
-        const skillsEl = document.getElementById('skills-input');
-        const coursesEl = document.getElementById('courses-input');
-        const experienceEl = document.getElementById('experience-input');
+        // Apply to form fields (matching index.html IDs)
+        const nameEl = document.getElementById('prof-name');
+        const fieldEl = document.getElementById('prof-field');
+        const skillsEl = document.getElementById('prof-skills');
+        const coursesEl = document.getElementById('prof-courses');
+        const experienceEl = document.getElementById('prof-experience');
+        const linkedinEl = document.getElementById('prof-linkedin');
 
         if (nameEl && name) nameEl.value = name;
         if (fieldEl && field) fieldEl.value = field;
         if (skillsEl && skills) skillsEl.value = skills;
         if (coursesEl && courses) coursesEl.value = courses;
         if (experienceEl && experience) experienceEl.value = experience;
+        if (linkedinEl && linkedin) linkedinEl.value = linkedin;
+
+        if (typeof Logger !== 'undefined') {
+            Logger.logCVSubmission(this.state.user, this._cvExtracted || {});
+        }
 
         // Show success message
         const status = document.getElementById('cv-import-status');
@@ -528,6 +780,7 @@ window.app = {
         const extracted = {
             name: this.extractName(text, lines),
             field: this.detectField(textLower),
+            linkedin: this.extractLinkedIn(text),
             skills: this.extractSkills(text, textLower),
             education: this.extractEducation(text, lines, textLower),
             experience: this.extractExperience(text, lines, textLower),
@@ -542,12 +795,18 @@ window.app = {
         return {
             name: extracted.name,
             field: extracted.field,
+            linkedin: extracted.linkedin,
             skills: extracted.skills.join(', '),
             experience: extracted.experience,
             courses: extracted.courses.join(', '),
             // Store structured data for review
             _extracted: extracted
         };
+    },
+
+    extractLinkedIn(text) {
+        const match = text.match(/linkedin\.com\/in\/[a-zA-Z0-9-]+\/?/);
+        return match ? 'https://www.' + match[0] : '';
     },
 
     extractName(text, lines) {
@@ -816,10 +1075,10 @@ window.app = {
         return 'Software Engineering'; // default
     },
 
-    handleJobSubmit() {
+    async handleJobSubmit() {
         const descEl = document.getElementById('job-desc-input');
         this.state.job.description = descEl ? descEl.value.trim() : '';
-        this.runAnalysis();
+        await this.runAnalysis();
     },
 
     continueAsGuest() {
@@ -832,32 +1091,41 @@ window.app = {
         const pill = document.getElementById('user-pill');
         const pillName = document.getElementById('pill-name');
         const pillInitials = document.getElementById('pill-initials');
+        const navAvatar = document.getElementById('nav-user-avatar');
+        
+        const name = this.state.user.name || (this.state.isGuest ? 'Guest User' : '');
+        const initials = name ? name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : 'U';
+
+        if (navAvatar) navAvatar.textContent = initials;
+
         if (this.state.isGuest) {
             if (pillName) pillName.textContent = 'Hi, Guest!';
             if (pillInitials) pillInitials.textContent = 'G';
             if (pill) pill.classList.remove('hidden');
             return;
         }
+        
         if (!this.state.user.name) return;
+        
         const firstName = this.state.user.name.split(' ')[0];
         if (pillName) pillName.textContent = `Hi, ${firstName}!`;
-        if (pillInitials) pillInitials.textContent = this.state.user.name.split(' ').map(n => n[0]).join('').toUpperCase();
+        if (pillInitials) pillInitials.textContent = initials;
         if (pill) pill.classList.remove('hidden');
     },
 
     saveUserData() {
         if (this.state.isGuest || !this.state.currentUser) return;
-        const users = JSON.parse(localStorage.getItem('prepwise_users_v2') || '{}');
+        const users = JSON.parse(localStorage.getItem('prepwise_users_v3') || '{}');
         const email = this.state.currentUser.email;
         if (!users[email]) users[email] = { profile: null, sessions: [] };
         users[email].profile = this.state.user;
         users[email].sessions = this.state.sessions;
-        localStorage.setItem('prepwise_users_v2', JSON.stringify(users));
-        localStorage.setItem('prepwise_session_v2', JSON.stringify({ email, ...users[email] }));
+        localStorage.setItem('prepwise_users_v3', JSON.stringify(users));
+        localStorage.setItem('prepwise_session_v3', JSON.stringify({ email, ...users[email] }));
     },
 
     signOut() {
-        localStorage.removeItem('prepwise_session_v2');
+        localStorage.removeItem('prepwise_session_v3');
         this.state.currentUser = null;
         this.state.isGuest = false;
         location.reload();
@@ -871,10 +1139,10 @@ window.app = {
         const confirmed = confirm('Delete your account?\n\nThis will permanently remove your profile and all session history. This cannot be undone.');
         if (!confirmed) return;
         const email = this.state.currentUser.email;
-        const users = JSON.parse(localStorage.getItem('prepwise_users_v2') || '{}');
+        const users = JSON.parse(localStorage.getItem('prepwise_users_v3') || '{}');
         delete users[email];
-        localStorage.setItem('prepwise_users_v2', JSON.stringify(users));
-        localStorage.removeItem('prepwise_session_v2');
+        localStorage.setItem('prepwise_users_v3', JSON.stringify(users));
+        localStorage.removeItem('prepwise_session_v3');
         location.reload();
     },
 
@@ -910,6 +1178,10 @@ window.app = {
     },
 
     goToStage(stageNum) {
+        if (stageNum === 3) {
+            this.state.wizard.step = 1;
+            this.renderWizardStep();
+        }
         this._navigateToStage(stageNum);
         const hash = STAGE_HASHES[stageNum] || '';
         if (stageNum === 0) {
@@ -921,48 +1193,28 @@ window.app = {
 
     _navigateToStage(stageNum) {
         this.state.currentStage = stageNum;
-        const viewKeys = ['auth', 'onboarding', 'analysis', 'modeSelection', 'interview', 'feedback', 'practice', 'dashboard'];
+        const viewKeys = ['auth', 'dashboard', 'profile', 'setup', 'interview', 'completion', 'report', 'practice', 'history'];
         Object.values(this.views).forEach(v => { if (v) v.classList.remove('active'); });
         const key = viewKeys[stageNum];
         if (this.views[key]) this.views[key].classList.add('active');
-        this.updateBreadcrumb(stageNum);
+        
+        // Show/Hide App Navigation
+        if (this.nav) {
+            if (stageNum === 0) {
+                this.nav.classList.add('hidden');
+            } else {
+                this.nav.classList.remove('hidden');
+            }
+        }
+
         window.scrollTo({ top: 0, behavior: 'smooth' });
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-    },
-
-    updateBreadcrumb(stage) {
-        const nav = document.getElementById('breadcrumb-nav');
-        if (!nav) return;
-        if (stage === 0) { nav.classList.add('hidden'); return; }
-        nav.classList.remove('hidden');
-
-        const steps = [
-            { label: 'Home', stage: 7, icon: 'home', action: 'window.app.handleLogoClick()' },
-            { label: 'Profile', stage: 1, icon: 'user', action: 'window.app.goToStage(1)' },
-            { label: 'Analysis', stage: 2, icon: 'zap', action: 'window.app.goToStage(2)' },
-            { label: 'Interview', stage: 4, icon: 'mic', action: null },
-            { label: 'Report', stage: 5, icon: 'file-text', action: 'window.app.goToStage(5)' },
-        ];
-
-        nav.innerHTML = steps.map((s, i) => {
-            const isActive = (stage === s.stage) || (stage === 3 && s.stage === 4) || (stage === 6 && s.stage === 5);
-            const isPast = stage > s.stage && s.stage !== 7;
-            const isHome = s.stage === 7;
-            const clickable = s.action && !isActive;
-            const cls = isActive
-                ? 'text-brand-500 font-black'
-                : (clickable || isHome) ? 'text-slate-400 hover:text-brand-500 cursor-pointer transition-colors' : 'text-slate-200 font-bold';
-            const handler = clickable ? `onclick="${s.action}"` : '';
-            return `
-                ${i > 0 ? '<span class="text-slate-200 text-xs">/</span>' : ''}
-                <span class="flex items-center gap-1.5 text-[10px] uppercase tracking-widest ${cls}" ${handler}>
-                    <i data-lucide="${s.icon}" class="w-3 h-3"></i>${s.label}
-                </span>
-            `;
-        }).join('');
+        
+        if (stageNum === 8) this.showHistory();
 
         if (typeof lucide !== 'undefined') lucide.createIcons();
     },
+
+
 
     extractRequirements(jobDesc) {
         const softSkillWords = [
@@ -1021,67 +1273,85 @@ window.app = {
     },
 
     // --- Analysis ---
-    runAnalysis() {
+    async runAnalysis() {
         const jobDesc = this.state.job.description;
-        const userField = this.state.user.field.toLowerCase();
-        const userSkillsList = this.state.user.skills.split(',').map(s => s.trim()).filter(Boolean);
-
-        // Extract requirements and match
-        const requirements = this.extractRequirements(jobDesc);
-        let matchScore = 50;
-        let strengths = [];
-        let gaps = [];
-        let topics = [];
-
-        if (requirements.length > 0) {
-            const { matched, missing } = this.matchRequirements(requirements, userSkillsList);
-            matchScore = Math.max(20, Math.min(95, Math.round(matched.length / requirements.length * 100) + (Math.random() * 10 - 5)));
-
-            strengths = matched.slice(0, 4);
-            gaps = missing.slice(0, 6);
-            topics = gaps.slice(0, 3);
-        } else {
-            // Fallback to old method if no requirements found
-            const jobDescLower = jobDesc.toLowerCase();
-            const jobKeywords = this.extractJobKeywords(jobDescLower);
-            matchScore = this.calculateMatchScore(jobKeywords, userSkillsList, userField, jobDescLower);
-            strengths = this.extractStrengths(jobKeywords, userSkillsList, userField);
-            gaps = this.identifySkillGaps(jobKeywords, userSkillsList);
-            topics = this.generateFocusTopics(jobKeywords, gaps, userField);
-        }
-
-        this.state.analysis.matchScore = matchScore;
-        this.state.analysis.strengths = strengths;
-        this.state.analysis.gaps = gaps;
-        this.state.analysis.topics = topics;
-        this.state.analysis.difficulty = this.getDifficultyLevel(matchScore, gaps.length);
-
-        const diffLevel = matchScore > 85 ? 2 : (matchScore > 70 ? 3 : 4);
+        const userProfile = JSON.stringify(this.state.user);
 
         const el = (id) => document.getElementById(id);
-        if (el('match-score')) el('match-score').textContent = `${matchScore}%`;
-        if (el('difficulty-text')) el('difficulty-text').textContent = this.state.analysis.difficulty;
-        if (el('difficulty-dots')) {
-            Array.from(el('difficulty-dots').children).forEach((dot, i) => {
-                dot.className = `w-3.5 h-3.5 rounded-full ${i < diffLevel ? 'bg-accent-lavender shadow-[0_0_10px_rgba(155,138,251,0.4)]' : 'bg-slate-200'}`;
-            });
+        const statusEl = el('job-desc-status') || el('interviewer-status');
+        
+        // Safety check for API key
+        const apiKey = window.PREPWISE_CONFIG?.GEMINI_API_KEY || localStorage.getItem('gemini_api_key');
+        if (!apiKey || apiKey === 'PASTE_YOUR_KEY_HERE') {
+            alert("API Key missing! Please open config.js and paste your Gemini API key.");
+            return;
         }
 
-        // Render with pill backgrounds
-        const renderRequirement = (req, icon, iconColor) => `
-            <li class="flex items-start gap-2.5 p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs font-medium text-brand-900 leading-snug">
-                <i data-lucide="${icon}" class="w-3.5 h-3.5 ${iconColor} mt-0.5 shrink-0"></i>
-                ${req}
-            </li>
-        `;
+        if (statusEl) statusEl.textContent = 'AI is analyzing job requirements...';
 
-        if (el('analysis-strengths')) el('analysis-strengths').innerHTML = strengths.map(s => renderRequirement(s, 'check', 'text-[#63D5C4]')).join('');
-        if (el('analysis-gaps')) el('analysis-gaps').innerHTML = gaps.map(g => renderRequirement(g, 'minus', 'text-red-400')).join('');
-        if (el('analysis-topics')) el('analysis-topics').innerHTML = topics.map(t => renderRequirement(t, 'circle-dot', 'text-brand-500')).join('');
+        try {
+            const prompt = `
+                Analyze the following Job Description and Candidate Profile.
+                Job Description: ${jobDesc}
+                Candidate Profile: ${userProfile}
 
-        if (el('job-input-section')) el('job-input-section').classList.add('hidden');
-        if (el('analysis-results-section')) el('analysis-results-section').classList.remove('hidden');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+                Provide a detailed match analysis in JSON format:
+                {
+                    "matchScore": number (0-100),
+                    "strengths": ["string", "string", ... max 4],
+                    "gaps": ["string", "string", ... max 6],
+                    "topics": ["string", "string", ... max 3 focus topics for practice],
+                    "difficulty": "Easy" | "Moderate" | "Challenging" | "Expert"
+                }
+            `;
+
+            const geminiResponseText = await this.callModelAPI(prompt, "You are a senior technical recruiter. Always respond in valid JSON.", true);
+            if (!geminiResponseText) throw new Error("No response from AI");
+
+            const jsonMatch = geminiResponseText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) throw new Error("Invalid AI response format");
+            
+            const result = JSON.parse(jsonMatch[0]);
+
+            this.state.analysis = {
+                matchScore: result.matchScore || 50,
+                strengths: result.strengths || [],
+                gaps: result.gaps || [],
+                topics: result.topics || [],
+                difficulty: result.difficulty || "Moderate"
+            };
+
+            const matchScore = this.state.analysis.matchScore;
+            const diffLevel = matchScore > 85 ? 2 : (matchScore > 70 ? 3 : 4);
+
+            if (el('match-score')) el('match-score').textContent = `${matchScore}%`;
+            if (el('difficulty-text')) el('difficulty-text').textContent = this.state.analysis.difficulty;
+            if (el('difficulty-dots')) {
+                Array.from(el('difficulty-dots').children).forEach((dot, i) => {
+                    dot.className = `w-3.5 h-3.5 rounded-full ${i < diffLevel ? 'bg-accent-lavender shadow-[0_0_10px_rgba(155,138,251,0.4)]' : 'bg-slate-200'}`;
+                });
+            }
+
+            const renderRequirement = (req, icon, iconColor) => `
+                <li class="flex items-start gap-2.5 p-2.5 bg-slate-50 rounded-lg border border-slate-100 text-xs font-medium text-brand-900 leading-snug">
+                    <i data-lucide="${icon}" class="w-3.5 h-3.5 ${iconColor} mt-0.5 shrink-0"></i>
+                    ${req}
+                </li>
+            `;
+
+            if (el('analysis-strengths')) el('analysis-strengths').innerHTML = this.state.analysis.strengths.map(s => renderRequirement(s, 'check', 'text-[#63D5C4]')).join('');
+            if (el('analysis-gaps')) el('analysis-gaps').innerHTML = this.state.analysis.gaps.map(g => renderRequirement(g, 'minus', 'text-red-400')).join('');
+            if (el('analysis-topics')) el('analysis-topics').innerHTML = this.state.analysis.topics.map(t => renderRequirement(t, 'circle-dot', 'text-brand-500')).join('');
+
+            if (el('job-input-section')) el('job-input-section').classList.add('hidden');
+            if (el('analysis-results-section')) el('analysis-results-section').classList.remove('hidden');
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+
+        } catch (error) {
+            console.error("Analysis Error:", error);
+            if (statusEl) statusEl.textContent = 'Error: ' + error.message;
+            alert("AI Analysis failed. Check your API key and connection.");
+        }
     },
 
     extractJobKeywords(jobDesc) {
@@ -1249,6 +1519,124 @@ window.app = {
         if (resultsSection) resultsSection.classList.add('hidden');
     },
 
+    // --- Setup Wizard ---
+    selectWizOption(category, value, el) {
+        try {
+            console.log(`[Wizard] Selecting ${category}: ${value}`);
+            
+            // Use explicit app reference for state safety
+            if (window.app && window.app.state && window.app.state.wizard) {
+                window.app.state.wizard[category] = value;
+            }
+
+            // Find the parent wizard-step container to clear sibling selections
+            const stepContainer = el.closest('.wizard-step');
+            if (stepContainer) {
+                const options = stepContainer.querySelectorAll('.wizard-option');
+                options.forEach(opt => {
+                    opt.classList.remove('selected', 'ring-4', 'ring-brand-500/20');
+                    // Add a light border back to unselected
+                    opt.style.borderColor = '#e2e8f0';
+                });
+            }
+            
+            // Apply selection styles to the clicked element
+            el.classList.add('selected', 'ring-4', 'ring-brand-500/20');
+            el.style.borderColor = '#3b82f6';
+            
+            // Specific overrides
+            if (category === 'mood') window.app.state.interviewerMood = value;
+            if (category === 'style') window.app.state.interviewMode = value;
+
+            console.log(`[Wizard] State updated:`, window.app.state.wizard);
+        } catch (err) {
+            console.error("[Wizard Error] Failed to select option:", err);
+        }
+    },
+
+    wizardNext() {
+        if (this.state.wizard.step === 1 && this.state.wizard.goal === 'specific') {
+            this.state.wizard.step = 2;
+        } else if (this.state.wizard.step === 1 && this.state.wizard.goal === 'general') {
+            this.state.wizard.step = 3;
+        } else if (this.state.wizard.step === 2) {
+            this.state.wizard.step = 3;
+        } else if (this.state.wizard.step === 3) {
+            this.state.wizard.step = 4;
+        } else if (this.state.wizard.step === 4) {
+            this.state.wizard.step = 5;
+            this.updateWizardPreview();
+        } else if (this.state.wizard.step === 5) {
+            this.startWizardInterview();
+            return;
+        }
+        this.renderWizardStep();
+    },
+
+    wizardBack() {
+        if (this.state.wizard.step === 5) {
+            this.state.wizard.step = 4;
+        } else if (this.state.wizard.step === 4) {
+            this.state.wizard.step = 3;
+        } else if (this.state.wizard.step === 3 && this.state.wizard.goal === 'specific') {
+            this.state.wizard.step = 2;
+        } else if (this.state.wizard.step === 3 && this.state.wizard.goal === 'general') {
+            this.state.wizard.step = 1;
+        } else if (this.state.wizard.step === 2) {
+            this.state.wizard.step = 1;
+        }
+        this.renderWizardStep();
+    },
+
+    renderWizardStep() {
+        const step = this.state.wizard.step;
+        document.querySelectorAll('.wizard-step').forEach(s => s.classList.add('hidden'));
+        document.getElementById(`wiz-step-${step}`).classList.remove('hidden');
+        
+        const prog = document.getElementById('wizard-progress');
+        if (prog) prog.style.width = `${(step / 5) * 100}%`;
+
+        const backBtn = document.getElementById('wiz-back-btn');
+        const nextBtn = document.getElementById('wiz-next-btn');
+        
+        if (backBtn) backBtn.classList.toggle('invisible', step === 1);
+        
+        if (nextBtn) {
+            if (step === 5) {
+                nextBtn.innerHTML = 'Start Interview <i data-lucide="play" class="w-4 h-4 ml-1 inline"></i>';
+                nextBtn.classList.add('bg-green-500', 'hover:bg-green-600', 'border-green-600');
+                nextBtn.classList.remove('bg-brand-600', 'hover:bg-brand-700');
+            } else {
+                nextBtn.innerHTML = 'Next <i data-lucide="arrow-right" class="w-4 h-4 ml-1 inline"></i>';
+                nextBtn.classList.remove('bg-green-500', 'hover:bg-green-600', 'border-green-600');
+                nextBtn.classList.add('bg-brand-600', 'hover:bg-brand-700');
+            }
+        }
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
+
+    updateWizardPreview() {
+        const styleMap = { 'hr': 'HR / Behavioral', 'technical': 'Technical Deep-Dive', 'project': 'Project Deep-Dive', 'friendly': 'Friendly / Relaxed' };
+        const moodMap = { 'professional': 'Professional', 'friendly': 'Friendly', 'hard': 'Challenging', 'casual': 'Casual' };
+        const contextMap = { 'specific': 'Specific Job', 'general': 'General Practice' };
+        
+        const styleEl = document.getElementById('wiz-prev-style');
+        const moodEl = document.getElementById('wiz-prev-mood');
+        const contextEl = document.getElementById('wiz-prev-context');
+        
+        if (styleEl) styleEl.textContent = styleMap[this.state.wizard.style] || 'HR / Behavioral';
+        if (moodEl) moodEl.textContent = moodMap[this.state.wizard.mood] || 'Professional';
+        if (contextEl) contextEl.textContent = contextMap[this.state.wizard.goal] || 'Specific Job';
+    },
+
+    startWizardInterview() {
+        this.state.interviewMode = this.state.wizard.style;
+        this.state.interviewerMood = this.state.wizard.mood;
+        const jobDescInput = document.getElementById('wiz-job-desc');
+        this.state.job.description = (this.state.wizard.goal === 'specific' && jobDescInput) ? jobDescInput.value : 'General role matching the student profile.';
+        this.startInterview();
+    },
+
     showModeSelection() {
         const score = this.state.analysis.matchScore;
         const recommended = score >= 75 ? 'technical' : score >= 55 ? 'hr' : 'friendly';
@@ -1390,979 +1778,721 @@ window.app = {
         return clarificationPatterns.some(pattern => pattern.test(text));
     },
 
-    // Detect user correction
-    isUserCorrection(text) {
-        const correctionPatterns = [
-            /actually|i meant|sorry|let me correct|that's not right|i should say|i meant to say|not exactly|correction|i don't actually/i
-        ];
-        return correctionPatterns.some(pattern => pattern.test(text));
+    getTranscribedAnswer() {
+        const editArea = document.getElementById('int-answer-area');
+        return editArea ? editArea.value.trim() : '';
     },
 
-    startInterview() {
-        this.state.interview.currentQuestionIndex = 0;
-        this.state.interview.responses = [];
-        this.state.interview.startTime = new Date();
-        this.state.interview.awaitingFollowUp = false;
-        this.state.interview.questions = [];
+    clearAnswer() {
+        const editArea = document.getElementById('int-answer-area');
+        if (editArea) editArea.value = '';
+    },
 
-        // Analyze job description
-        const jobAnalysis = this.analyzeJobDescription();
+    submitInterviewAnswer() {
+        this.handleNextQuestion();
+    },
 
-        this.state.interview.conversationContext = {
-            stage: 'opening',
-            stagesCompleted: [],
-            jobAnalysis: jobAnalysis,
-            userSkills: this.extractUserSkills(),
-            mentionedTopics: [],
-            clarificationAsked: false,
-            correctionMade: false,
-            extractedInfo: {
-                background: [],
-                skills: [],
-                experiences: [],
-                challenges: [],
-                projects: [],
-                achievements: [],
-                tools: [],
-                goals: [],
-                weknowledge: [],
-                doesNotKnow: []
-            },
-            technicalAsked: 0,
-            lastAnswerQuality: null,
-            followUpCount: 0,
-            maxFollowUpsPerStage: 2
+    toggleDictation() {
+        const micBtn = document.getElementById('int-mic-btn');
+        const micLabel = document.getElementById('int-mic-label');
+
+        if (this.state.interview.isListening) {
+            this.stopListening();
+            if (micLabel) micLabel.textContent = 'Dictate';
+            if (micBtn) micBtn.classList.remove('bg-red-50', 'text-red-600', 'border-red-200');
+        } else {
+            this.startListening();
+            if (micLabel) micLabel.textContent = 'Listening...';
+            if (micBtn) micBtn.classList.add('bg-red-50', 'text-red-600', 'border-red-200');
+        }
+    },
+
+    updateTranscriptDisplay() {
+        const editArea = document.getElementById('int-answer-area');
+        if (editArea && this.state.transcriptState.final) {
+            editArea.value = this.state.transcriptState.final + this.state.transcriptState.interim;
+            editArea.scrollTop = editArea.scrollHeight;
+        }
+    },
+
+    updateInterviewProgress() {
+        const timeline = document.getElementById('int-progress-timeline');
+        if (!timeline) return;
+
+        const currentIdx = this.state.interview.currentQuestionIndex;
+        const total = 6;
+        let html = '';
+
+        for (let i = 0; i < total; i++) {
+            const isPast = i < currentIdx;
+            const isCurrent = i === currentIdx;
+
+            let icon = 'circle';
+            let colorCls = 'bg-slate-800 border-slate-700 text-slate-500';
+
+            if (isPast) {
+                icon = 'check';
+                colorCls = 'bg-brand-500 border-brand-500 text-white';
+            } else if (isCurrent) {
+                icon = 'loader';
+                colorCls = 'bg-slate-800 border-brand-500 text-brand-500 ring-4 ring-brand-500/20';
+            }
+
+            html += `
+                <div class="relative flex items-center gap-4">
+                    <div class="w-6 h-6 rounded-full border-2 ${colorCls} flex items-center justify-center relative z-10 shrink-0">
+                        <i data-lucide="${icon}" class="w-3 h-3 ${isCurrent ? 'animate-spin' : ''}"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-xs font-bold ${isCurrent ? 'text-white' : (isPast ? 'text-slate-300' : 'text-slate-500')}">Question ${i + 1}</p>
+                    </div>
+                </div>
+            `;
+        }
+        timeline.innerHTML = html;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
+
+    // --- Interview Logic ---
+    askQuestion() {
+        const qText = document.getElementById('interviewer-question-text');
+        const counter = document.getElementById('int-q-counter');
+        const typeLabel = document.getElementById('int-type-label');
+        const nextBtn = document.getElementById('int-submit-btn');
+        const editArea = document.getElementById('int-answer-area');
+
+        const currentQ = this.state.interview.questions[this.state.interview.currentQuestionIndex];
+
+        if (qText) qText.textContent = currentQ;
+        
+        if (typeof Logger !== 'undefined') {
+            Logger.logQuestion(this.state.interview.currentQuestionIndex + 1, currentQ, this.state.interviewMode);
+        }
+        
+        this.state.interview.questionStartTime = new Date();
+
+        if (counter) {
+            const count = this.state.interview.currentQuestionIndex + 1;
+            counter.textContent = `Question ${count} of 6`;
+        }
+        if (typeLabel) {
+            typeLabel.textContent = this.state.interviewMode + ' Interview';
+        }
+
+        if (nextBtn) {
+            nextBtn.disabled = false;
+            nextBtn.innerHTML = 'Submit Answer <i data-lucide="send" class="w-4 h-4 ml-1 inline"></i>';
+        }
+
+        if (editArea) {
+            editArea.value = '';
+            editArea.focus();
+        }
+
+        this.updateInterviewProgress();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
+
+    showAIBridge(data, callback) {
+        if (callback) callback();
+    },
+
+    async skipQuestion() {
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
+        this.stopListening();
+        const nextBtn = document.getElementById('int-submit-btn');
+        const qText = document.getElementById('interviewer-question-text');
+
+        if (nextBtn) {
+            nextBtn.disabled = true;
+            nextBtn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Skipping...';
+        }
+        if (qText) qText.textContent = 'Generating next question...';
+
+        const previousQuestion = this.state.interview.questions[this.state.interview.currentQuestionIndex];
+
+        const answer = "(Student skipped this question)";
+        this.state.interview.latestAnswer = answer;
+        this.state.interview.previousQuestion = previousQuestion;
+        this.state.interview.transcript.push({ role: "user", content: answer });
+
+        if (typeof Logger !== 'undefined') {
+            const duration = Math.round((new Date() - this.state.interview.questionStartTime) / 1000);
+            Logger.logAnswer(this.state.interview.currentQuestionIndex + 1, answer, duration);
+        }
+
+        const messages = this.state.interview.transcript.map(msg => ({
+            role: msg.role,
+            content: msg.content
+        }));
+
+        const aiMessage = await this.callModelAPI(messages, this.getInterviewSystemPrompt());
+
+        if (aiMessage) {
+            this.state.interview.responses.push({ question: previousQuestion, answer, feedback: "Skipped" });
+            this.state.interview.transcript.push({ role: "assistant", content: aiMessage });
+            this.state.interview.askedQuestions.push(aiMessage);
+
+            this.state.interview.questions.push(aiMessage);
+            this.state.interview.currentQuestionIndex++;
+            this.resetTranscriptState();
+
+            if (aiMessage.toLowerCase().includes("thank you for your time") || this.state.interview.currentQuestionIndex > 5) {
+                this.goToStage(5);
+                setTimeout(() => {
+                    this.generateFinalReport();
+                }, 2000);
+            } else {
+                this.askQuestion();
+            }
+        } else {
+            if (nextBtn) {
+                nextBtn.disabled = false;
+                nextBtn.innerHTML = 'Submit Answer <i data-lucide="send" class="w-4 h-4 ml-1 inline"></i>';
+            }
+        }
+    },
+
+    async handleNextQuestion() {
+        const answer = this.getTranscribedAnswer();
+        if (!answer || answer.length < 5) return;
+
+        this.stopListening();
+        const nextBtn = document.getElementById('int-submit-btn');
+        const qText = document.getElementById('interviewer-question-text');
+
+        if (nextBtn) {
+            nextBtn.disabled = true;
+            nextBtn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Crafting next question...';
+        }
+
+        const previousQuestion = this.state.interview.questions[this.state.interview.currentQuestionIndex];
+
+        this.state.interview.latestAnswer = answer;
+        this.state.interview.previousQuestion = previousQuestion;
+        this.state.interview.transcript.push({ role: "user", content: answer });
+
+        if (typeof Logger !== 'undefined') {
+            const duration = Math.round((new Date() - this.state.interview.questionStartTime) / 1000);
+            Logger.logAnswer(this.state.interview.currentQuestionIndex + 1, answer, duration);
+        }
+
+        if (qText) qText.textContent = 'Crafting next question...';
+        
+        const messages = this.state.interview.transcript.map(msg => ({ role: msg.role, content: msg.content }));
+
+        const aiMessage = await this.callModelAPI(messages, this.getInterviewSystemPrompt());
+
+        if (aiMessage) {
+            this.state.interview.responses.push({ question: previousQuestion, answer, feedback: "Analyzed" });
+            this.state.interview.transcript.push({ role: "assistant", content: aiMessage });
+            this.state.interview.askedQuestions.push(aiMessage);
+
+            this.state.interview.questions.push(aiMessage);
+            this.state.interview.currentQuestionIndex++;
+            this.resetTranscriptState();
+
+            if (aiMessage.toLowerCase().includes("thank you for your time") || this.state.interview.currentQuestionIndex > 5) {
+                this.goToStage(5);
+                setTimeout(() => {
+                    this.generateFinalReport();
+                }, 2000);
+            } else {
+                this.askQuestion();
+            }
+        } else {
+            if (qText) qText.textContent = 'AI Generation failed. Check connection.';
+            if (nextBtn) {
+                nextBtn.disabled = false;
+                nextBtn.innerHTML = 'Submit Answer <i data-lucide="send" class="w-4 h-4 ml-1 inline"></i>';
+            }
+        }
+    },
+
+    async startInterview() {
+        // Reset Stateful Interview Object
+        this.state.interview = {
+            currentQuestionIndex: 0,
+            questions: [],
+            responses: [],
+            startTime: new Date(),
+            isListening: false,
+            awaitingFollowUp: false,
+            previousQuestion: '',
+            latestAnswer: '',
+            transcript: [],
+            askedQuestions: []
         };
 
-        // Generate opening question
-        const openingQuestion = this.generateOpeningQuestion();
-        this.state.interview.questions.push(openingQuestion);
+        const statusEl = document.getElementById('interviewer-status');
+        if (statusEl) statusEl.textContent = 'Starting interview...';
+
+        if (typeof Logger !== 'undefined') {
+            Logger.logInterviewStart(this.state.user, this.state.interviewMode, this.state.job.description);
+        }
+
+        const opening = await this.callModelAPI(
+            "Start the interview. Introduce yourself briefly and ask the first question.", 
+            this.getInterviewSystemPrompt()
+        );
+
+        if (opening) {
+            this.state.interview.questions.push(opening);
+            this.state.interview.transcript.push({ role: "assistant", content: opening });
+            this.state.interview.askedQuestions.push(opening);
+        } else {
+            const fallback = `Hi! Tell me about yourself and your background in ${this.state.user.field}.`;
+            this.state.interview.questions.push(fallback);
+            this.state.interview.transcript.push({ role: "assistant", content: fallback });
+            this.state.interview.askedQuestions.push(fallback);
+        }
 
         this.goToStage(4);
         this.resetTranscriptState();
         setTimeout(() => this.askQuestion(), 400);
     },
-
-    extractUserSkills() {
-        const skills = (this.state.user.skills || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-        const experience = (this.state.user.experience || '').toLowerCase();
-
-        return {
-            mentioned: skills,
-            hasPython: skills.some(s => s.includes('python')) || experience.includes('python'),
-            hasSQL: skills.some(s => s.includes('sql')) || experience.includes('sql'),
-            hasExcel: skills.some(s => s.includes('excel')) || experience.includes('excel'),
-            hasAnalytics: skills.some(s => s.includes('analysis') || s.includes('analytics')) || experience.includes('analyz'),
-            hasStatistics: skills.some(s => s.includes('statistic')) || experience.includes('statistic'),
-            isTechnical: this.state.user.field && (this.state.user.field.toLowerCase().includes('engineer') || this.state.user.field.toLowerCase().includes('developer') || this.state.user.field.toLowerCase().includes('technical')),
-            isDataRole: this.state.user.field && (this.state.user.field.toLowerCase().includes('data') || this.state.user.field.toLowerCase().includes('analyst')),
-            isAdminRole: this.state.user.field && this.state.user.field.toLowerCase().includes('admin')
-        };
-    },
-
-    generateOpeningQuestion() {
-        const firstName = this.state.user.name ? this.state.user.name.split(' ')[0] : 'there';
-        const hasJobDescription = this.state.job.description && this.state.job.description.trim().length > 10;
-
-        if (hasJobDescription) {
-            return `Hi ${firstName}! Thank you for taking the time to interview for this role. Before we dive into specifics, could you tell me a bit about your professional background and what drew you to this type of work?`;
-        } else {
-            return `Hi ${firstName}! To get us started, could you tell me about your professional background and experience in your field?`;
-        }
-    },
-
-    askQuestion() {
-        const question = this.state.interview.questions[this.state.interview.currentQuestionIndex];
-        const questionEl = document.getElementById('question-text');
-        const statusEl = document.getElementById('interviewer-status');
-        const pulseEl = document.getElementById('ai-pulse');
-        const counterEl = document.getElementById('question-counter');
-
-        if (questionEl) questionEl.textContent = `"${question}"`;
-        if (pulseEl) pulseEl.classList.remove('opacity-100');
-
-        // Calculate progress based on interview stage
-        const stageNames = ['Opening', 'Background', 'Skills', 'Behavioral', 'Growth', 'Role-Specific', 'Closing'];
-        const currentStageIndex = Math.min(this.state.interview.currentQuestionIndex, stageNames.length - 1);
-        const stageName = stageNames[currentStageIndex] || 'Interview';
-
-        if (counterEl) {
-            counterEl.textContent = `${stageName} — Question ${this.state.interview.currentQuestionIndex + 1}`;
-        }
-
-        this.resetTranscriptState();
-        this.setMicState('idle');
-
-        const rate = this.state.interviewMode === 'rapid' ? 1.05 : 0.94;
-        this.speak(question, () => {
-            if (statusEl) statusEl.textContent = 'Your turn — tap Speak to respond';
-        }, rate);
-    },
-
-    handleNextQuestion() {
-        const answer = this.getTranscribedAnswer();
-
-        if (!answer || answer.length < 5) {
-            const statusEl = document.getElementById('interviewer-status');
-            if (statusEl) {
-                statusEl.textContent = "Please share your response before continuing.";
-                setTimeout(() => { statusEl.textContent = 'Your turn — tap Speak to respond'; }, 2500);
+    async generateFinalReport() {
+        const responses = this.state.interview.responses;
+        const transcript = responses.map(r => `Interviewer: ${r.question}\nCandidate: ${r.answer}`).join('\n');
+        
+        const reportPrompt = `
+            The interview is complete. Analyze the following transcript and provide a detailed career coach evaluation.
+            
+            TRANSCRIPT:
+            ${transcript}
+            
+            Follow these rules for the evaluation:
+            1. Overall score: X/10
+            2. Strong points: List 3 key strengths.
+            3. Needs improvement: List 3 specific areas to work on.
+            4. Action plan: Create 3 practical tasks for them to improve before their next interview.
+            5. Best answer: Mention which answer was best and why.
+            6. Weakest answer: Mention which answer was weakest and how to improve it gently.
+            7. Practical improvement: Rewrite the weakest answer using the STAR method (Situation, Task, Action, Result) as an example.
+            
+            Format your response as a JSON object:
+            {
+                "score": number,
+                "strengths": ["string", "string", "string"],
+                "improvements": ["string", "string", "string"],
+                "actionPlan": ["string", "string", "string"],
+                "bestAnswer": "string",
+                "weakestAnswer": "string",
+                "starExample": "string"
             }
-            return;
+        `;
+
+        const statusEl = document.getElementById('completion-status-text');
+        if (statusEl) statusEl.textContent = 'Analyzing your performance...';
+
+        const aiReportRaw = await this.callModelAPI(reportPrompt, "You are an expert career coach. Always respond in valid JSON.", true);
+        
+        try {
+            const jsonMatch = aiReportRaw.match(/\{[\s\S]*\}/);
+            const aiReport = JSON.parse(jsonMatch ? jsonMatch[0] : aiReportRaw);
+
+            const el = (id) => document.getElementById(id);
+            
+            if (el('rep-score')) el('rep-score').textContent = aiReport.score;
+            if (el('rep-score-label')) {
+                const s = aiReport.score;
+                el('rep-score-label').textContent = s >= 9 ? 'Excellent' : (s >= 7 ? 'Good' : (s >= 5 ? 'Needs Practice' : 'Beginner'));
+            }
+            if (el('rep-strengths')) el('rep-strengths').innerHTML = (aiReport.strengths || []).map(s => `<li><i data-lucide="check" class="w-3.5 h-3.5 text-green-500 inline mr-1"></i> ${s}</li>`).join('');
+            if (el('rep-weaknesses')) el('rep-weaknesses').innerHTML = (aiReport.improvements || []).map(i => `<li><i data-lucide="x" class="w-3.5 h-3.5 text-orange-400 inline mr-1"></i> ${i}</li>`).join('');
+            if (el('rep-action-plan')) el('rep-action-plan').innerHTML = (aiReport.actionPlan || aiReport.improvements || []).map(a => `<li class="flex gap-2 items-start"><i data-lucide="arrow-right-circle" class="w-4 h-4 text-brand-500 mt-0.5 shrink-0"></i> <span>${a}</span></li>`).join('');
+            
+            if (el('rep-best-answer')) el('rep-best-answer').textContent = `"${aiReport.bestAnswer}"`;
+            if (el('rep-worst-answer')) el('rep-worst-answer').textContent = `"${aiReport.weakestAnswer}"`;
+            if (el('rep-star-example')) el('rep-star-example').textContent = aiReport.starExample;
+
+            const qReviewContainer = el('rep-q-review');
+            if (qReviewContainer) {
+                qReviewContainer.innerHTML = responses.map((r, i) => {
+                    const noResponse = !r.answer || r.answer.length < 5 || r.answer.includes("skipped");
+                    return `
+                        <div class="card space-y-3">
+                            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Question ${i+1}</p>
+                            <p class="text-sm font-bold text-slate-800 leading-relaxed">${r.question}</p>
+                            <div class="bg-slate-50 p-4 rounded-xl border-l-4 ${noResponse ? 'border-orange-300 italic text-slate-400' : 'border-brand-500 text-slate-700'} text-sm leading-relaxed">
+                                ${noResponse ? 'Skipped or no response recorded.' : r.answer}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            this.saveSession(aiReport);
+
+            if (typeof Logger !== 'undefined') {
+                const totalDuration = Math.round((new Date() - this.state.interview.startTime) / 1000);
+                Logger.logInterviewComplete(aiReport, aiReport.improvements?.join(', '), totalDuration);
+            }
+
+            // Show continue button on completion screen
+            if (statusEl) statusEl.textContent = 'Analysis Complete!';
+            const continueBtn = document.getElementById('btn-continue-report');
+            if (continueBtn) continueBtn.classList.remove('hidden');
+
+        } catch (e) {
+            console.error("Failed to parse AI report:", e);
+            if (statusEl) statusEl.textContent = 'Analysis failed. Please try again.';
         }
 
-        this.stopListening();
-        const context = this.state.interview.conversationContext;
-        const currentQuestion = this.state.interview.questions[this.state.interview.currentQuestionIndex];
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
 
-        // Check if this is a clarification request
-        if (this.isClarificationRequest(answer)) {
-            // User is asking for clarification - don't record as answer, clarify the question
-            const clarification = this.generateClarification(currentQuestion, answer);
-            this.showAIBridge({
-                text: clarification,
-                type: 'clarification',
-                injectAsNextQuestion: false
-            }, () => {
-                // Stay on same question, user can answer again
-                this.resetTranscriptState();
-                this.setMicState('idle');
-            });
-            return;
+    handleReportContinue() {
+        this.showInsights();
+    },
+
+    showInsights() {
+        const el = (id) => document.getElementById(id);
+        const name = this.state.user.name || 'User';
+        const firstName = name.split(' ')[0];
+
+        if (el('insights-user-name')) el('insights-user-name').textContent = `${firstName}'s AI Insights`;
+        
+        // Populate random/mock market value for fun
+        if (el('insights-market-value')) {
+            const baseValue = 85000;
+            const extra = this.state.sessions.length * 1500;
+            const value = baseValue + extra;
+            el('insights-market-value').textContent = `$${value.toLocaleString()}`;
         }
 
-        // Check if this is a user correction
-        if (this.isUserCorrection(answer)) {
-            // Handle correction
-            const correctionResponse = this.handleUserCorrection(answer, context);
-            this.showAIBridge({
-                text: correctionResponse,
-                type: 'correction',
-                injectAsNextQuestion: false
-            }, () => {
-                // Reset and let user answer the current question
-                this.resetTranscriptState();
-                this.setMicState('idle');
-            });
-            return;
-        }
+        this.goToStage(8);
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
 
-        // Record answer as normal
-        const analysis = this.analyzeAnswer(answer, this.state.interview.currentQuestionIndex);
-        const feedback = this.generateNeuralFeedback(answer);
-
-        this.state.interview.responses.push({
-            question: currentQuestion,
-            answer,
-            analysis,
-            feedback
+    saveSession(aiReport) {
+        this.state.sessions.unshift({
+            date: new Date().toLocaleDateString(),
+            mode: this.state.interviewMode,
+            score: aiReport.score,
+            field: this.state.user.field,
+            strengths: aiReport.strengths || [],
+            weaknesses: aiReport.improvements || [],
+            actionPlan: aiReport.actionPlan || [],
+            bestAnswer: aiReport.bestAnswer || '',
+            weakestAnswer: aiReport.weakestAnswer || '',
+            starExample: aiReport.starExample || '',
+            responses: JSON.parse(JSON.stringify(this.state.interview.responses))
         });
+        this.saveUserData();
+    },
 
-        // Check if this is candidate questions or closing
-        if (context.stage === 'candidateQuestions' || context.stage === 'closing') {
-            const ack = this.generateAdaptiveAcknowledgment(answer, analysis);
-            this.showAIBridge(ack, () => {
-                this.generateFinalReport();
-                this.saveSession(this.state.analysis.matchScore + 2);
-                this.goToStage(5);
-            });
-            return;
+    // --- Practice ---
+    async startPractice() {
+        const el = (id) => document.getElementById(id);
+        const latestSession = this.state.sessions[0];
+        const weakness = (latestSession && latestSession.weaknesses && latestSession.weaknesses.length > 0) 
+                         ? latestSession.weaknesses[0] 
+                         : "General Communication";
+
+        this.state.currentPracticeWeakness = weakness;
+
+        // Reset UI
+        if (el('practice-weakness-name')) el('practice-weakness-name').textContent = weakness;
+        if (el('practice-answer-input')) el('practice-answer-input').value = '';
+        if (el('practice-feedback-container')) el('practice-feedback-container').classList.add('hidden');
+        if (el('practice-container')) el('practice-container').classList.add('hidden');
+        if (el('practice-loading')) el('practice-loading').classList.remove('hidden');
+
+        this.goToStage(7);
+
+        try {
+            const prompt = `
+                The student wants to practice their weakest area: "${weakness}".
+                Based on this area, generate ONE specific, challenging interview question that would help them improve.
+                
+                Respond with ONLY the question text.
+            `;
+            
+            const question = await this.callModelAPI(prompt, "You are an expert career coach helping a student improve a specific interview weakness.");
+            
+            if (el('practice-question')) el('practice-question').textContent = question || `How do you specifically handle challenges related to ${weakness}?`;
+            
+            if (el('practice-loading')) el('practice-loading').classList.add('hidden');
+            if (el('practice-container')) el('practice-container').classList.remove('hidden');
+        } catch (err) {
+            console.error("Failed to generate practice question:", err);
+            if (el('practice-question')) el('practice-question').textContent = `Can you give me an example of how you've demonstrated strong ${weakness} in the past?`;
+            if (el('practice-loading')) el('practice-loading').classList.add('hidden');
+            if (el('practice-container')) el('practice-container').classList.remove('hidden');
+        }
+        
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
+
+    async submitPracticeAnswer() {
+        const el = (id) => document.getElementById(id);
+        const answer = el('practice-answer-input')?.value.trim();
+        if (!answer || answer.length < 5) return alert("Please type a more detailed response.");
+
+        const btn = el('btn-submit-practice');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Analyzing...';
         }
 
-        // Decide whether to follow up or move to next question
-        let shouldFollowUp = analysis.shouldFollowUp && context.followUpCount < context.maxFollowUpsPerStage;
-
-        // Generate acknowledgment
-        const ack = this.generateAdaptiveAcknowledgment(answer, analysis);
-
-        this.showAIBridge(ack, () => {
-            if (shouldFollowUp && ack.followUpQuestion) {
-                context.followUpCount++;
-                this.state.interview.questions.push(ack.followUpQuestion);
-            } else {
-                context.followUpCount = 0;
-                this.state.interview.currentQuestionIndex++;
-                const nextQuestion = this.generateRealisticQuestion(answer, context);
-                this.state.interview.questions.push(nextQuestion);
+        try {
+            const prompt = `
+                The student is practicing their growth area: "${this.state.currentPracticeWeakness}".
+                
+                QUESTION ASKED: ${el('practice-question').textContent}
+                STUDENT ANSWER: ${answer}
+                
+                Provide a brief, encouraging, and highly actionable evaluation of this answer. 
+                Point out one thing they did well and one specific thing they could still improve.
+                Keep it under 100 words.
+            `;
+            
+            const feedback = await this.callModelAPI(prompt, "You are an expert career coach providing instant feedback on a practice answer.");
+            
+            if (el('practice-feedback-text')) el('practice-feedback-text').innerHTML = `<p>${feedback.replace(/\n/g, '<br>')}</p>`;
+            if (el('practice-feedback-container')) el('practice-feedback-container').classList.remove('hidden');
+            
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        } catch (err) {
+            console.error("Failed to analyze practice answer:", err);
+            alert("Connection error. Please try again.");
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = 'Analyze Performance <i data-lucide="sparkles" class="w-4 h-4 group-hover:rotate-12 transition-transform"></i>';
             }
-            this.askQuestion();
-        });
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
     },
 
-    generateClarification(question, clarificationRequest) {
-        // Detect what the user is confused about and clarify
-        const isConfused = /what do you mean|can you explain|can you clarify|what are you asking/i.test(clarificationRequest);
-        const isAskingForExample = /example|specific|concrete/i.test(clarificationRequest);
-        const isAsking = /are you asking|do you mean|one or|which/i.test(clarificationRequest);
-
-        if (isAskingForExample) {
-            return `Of course. Let me give you some context. For example, this could be from your work experience, a project, your studies, or even from managing a task. Any situation where you used skills or made a decision would count. Does that help clarify?`;
-        } else if (isAsking) {
-            return `Let me rephrase that. I'm interested in your experience and how you approach this type of situation. Feel free to draw from any relevant experience you have. Can you give me an example?`;
-        } else if (isConfused) {
-            return `I understand. Let me reframe that. The core of what I'm asking is: Can you think of a real situation where you had to deal with this kind of challenge or decision?`;
+    openLatestReport() {
+        if (this.state.sessions.length > 0) {
+            this.loadSessionReport(0);
         }
-        return `Let me clarify. I'm asking about your experience with this type of situation. Any example you have would be helpful.`;
     },
 
-    handleUserCorrection(answer, context) {
-        context.correctionMade = true;
+    loadSessionReport(index) {
+        const s = this.state.sessions[index];
+        if (!s) return;
 
-        // Extract what the user is correcting
-        if (/don't know|not know|don't have/i.test(answer)) {
-            return `Understood. That's helpful to know. I'll adjust the technical level of my questions based on what you do know. Let's focus on areas where you have experience.`;
-        } else if (/meant to say|actually|i should say/i.test(answer)) {
-            return `Thanks for clarifying that. I've got it. Please go ahead with your corrected answer.`;
-        } else if (/wrong|incorrect|that's not right/i.test(answer)) {
-            return `Got it, thanks for the correction. Let me adjust my understanding. Can you tell me what the correct information is?`;
+        const el = (id) => document.getElementById(id);
+        
+        // Switch to report stage
+        this.goToStage(6);
+
+        // Populate values
+        if (el('rep-score')) el('rep-score').textContent = s.score;
+        if (el('rep-score-label')) {
+            el('rep-score-label').textContent = s.score >= 9 ? 'Excellent' : (s.score >= 7 ? 'Good' : (s.score >= 5 ? 'Needs Practice' : 'Beginner'));
         }
-        return `Thanks for that correction. I appreciate the clarity.`;
-    },
-
-    analyzeAnswer(answer, questionIndex) {
-        if (!answer || answer.trim().length === 0) return { quality: 'empty', shouldFollowUp: true, extractedInfo: {} };
-
-        const words = answer.trim().split(/\s+/).length;
-        const answerLower = answer.toLowerCase();
-
-        // Classify answer quality
-        let quality = 'complete';
-        if (words < 10) quality = 'tooShort';
-        else if (words < 25) quality = 'brief';
-        else if (words > 200) quality = 'tooLong';
-
-        const hasExample = /(i |my |we |project|when |worked on|built|led |created|solved|implemented|experience|situation|team|responsibility)/i.test(answer);
-        const hasMetric = /(\d+%|\d+x|increased|improved|reduced|saved|achieved)/i.test(answer);
-        const hasResult = /(result|outcome|achieved|improved|increased|reduced|saved|learned|realized|impact|growth)/i.test(answer);
-        const hasChallenge = /(challenge|difficult|struggled|learned|overcome|hard|problem|issue)/i.test(answer);
-
-        let shouldFollowUp = false;
-        let followUpType = null;
-
-        if (quality === 'empty' || quality === 'tooShort') {
-            shouldFollowUp = true;
-            followUpType = 'clarification';
-        } else if (hasExample && !hasResult && !hasMetric) {
-            shouldFollowUp = true;
-            followUpType = 'outcome';
-        } else if (hasChallenge && !hasResult) {
-            shouldFollowUp = true;
-            followUpType = 'learning';
-        }
-
-        // Extract key information
-        const extractedInfo = {};
-
-        // Skill extraction
-        const skillKeywords = ['python', 'javascript', 'react', 'node', 'sql', 'aws', 'docker', 'kubernetes', 'leadership', 'communication', 'teamwork', 'analysis', 'design', 'project management', 'typescript', 'java', 'c++', 'go', 'rust', 'angular', 'vue', 'git', 'agile', 'scrum'];
-        extractedInfo.skills = skillKeywords.filter(s => answerLower.includes(s));
-
-        // Experience/project extraction
-        if (/(project|built|created|developed|designed|led|managed|worked on)/i.test(answer)) {
-            extractedInfo.hasProjectExperience = true;
-        }
-
-        // Challenge extraction
-        if (hasChallenge) {
-            extractedInfo.mentionedChallenge = true;
-        }
-
-        // Achievement extraction
-        if (hasMetric || hasResult) {
-            extractedInfo.mentionedOutcome = true;
-        }
-
-        return {
-            quality,
-            words,
-            hasExample,
-            hasResult,
-            hasMetric,
-            hasChallenge,
-            shouldFollowUp,
-            followUpType,
-            extractedInfo
-        };
-    },
-
-    generateAdaptiveAcknowledgment(answer, analysis) {
-        const { quality, followUpType, extractedInfo } = analysis;
-
-        // More realistic interviewer acknowledgments
-        const ackMap = {
-            empty: {
-                text: `I didn't quite catch that. Could you share a bit more?`,
-                followUp: "Can you walk me through a specific example or situation?"
-            },
-            tooShort: {
-                text: `I want to understand that a bit better.`,
-                followUp: extractedInfo.mentionedChallenge ?
-                    "Can you give me a specific example of how you handled that?"
-                    : "Can you tell me more about that situation?"
-            },
-            brief: {
-                text: followUpType === 'outcome' ?
-                    "That gives me some context. What was the actual outcome or impact?"
-                    : followUpType === 'learning' ?
-                    "I see. What did you take away from that experience?"
-                    : "Thank you. I appreciate that.",
-                followUp: null
-            },
-            complete: {
-                text: quality === 'tooLong' ?
-                    "That's detailed. To focus on what matters most — what would you say was the key impact?"
-                    : "That's helpful. I can see you have solid experience there.",
-                followUp: null
-            }
-        };
-
-        const ack = ackMap[quality] || ackMap.complete;
-        return {
-            text: ack.text,
-            followUpQuestion: ack.followUp,
-            injectAsNextQuestion: !!ack.followUp,
-            type: followUpType ? 'probe' : 'acknowledge',
-            shouldFollowUp: analysis.shouldFollowUp
-        };
-    },
-
-    generateRealisticQuestion(prevAnswer, context) {
-        const currentIndex = this.state.interview.currentQuestionIndex;
-        const jobAnalysis = context.jobAnalysis;
-        const userSkills = context.userSkills;
-        const stage = context.stage;
-
-        // Stage progression logic
-        if (currentIndex === 1) {
-            context.stage = 'background';
-            return this.generateBackgroundQuestion(prevAnswer, jobAnalysis);
-        } else if (currentIndex === 2) {
-            context.stage = 'rolefit';
-            return this.generateRoleFitQuestion(prevAnswer, jobAnalysis);
-        } else if (currentIndex === 3) {
-            context.stage = 'behavioral';
-            return this.getBehavioralQuestion();
-        } else if (currentIndex === 4) {
-            context.stage = 'technical';
-            return this.generateTechnicalQuestion(userSkills, jobAnalysis);
-        } else if (currentIndex === 5) {
-            context.stage = 'scenario';
-            return this.generateScenarioQuestion(jobAnalysis, userSkills);
-        } else if (currentIndex === 6) {
-            context.stage = 'closing';
-            return `Before we wrap up, do you have any questions for me about the role, team, or company?`;
-        }
-
-        // Fallback
-        return `Is there anything else you'd like me to know about your experience with this type of work?`;
-    },
-
-    generateBackgroundQuestion(prevAnswer, jobAnalysis) {
-        const prevLower = prevAnswer.toLowerCase();
-
-        // If they mentioned a specific role or company, ask about it
-        if (/worked|company|role|position|engineer|analyst|manager/i.test(prevAnswer)) {
-            return `That's helpful. Can you tell me more about what you did in that role and what technologies or tools you worked with?`;
-        }
-
-        // If they mentioned education
-        if (/studied|school|university|degree|graduate/i.test(prevAnswer)) {
-            return `Good. Beyond your studies, can you describe a project or work experience where you applied what you learned?`;
-        }
-
-        // Generic follow-up to background
-        return `I appreciate that context. What's the most relevant experience you have for this type of role?`;
-    },
-
-    generateRoleFitQuestion(prevAnswer, jobAnalysis) {
-        const skills = jobAnalysis.skills;
-        const roleType = jobAnalysis.roleType;
-        const prevLower = prevAnswer.toLowerCase();
-
-        // If job requires specific technical skills, ask about them
-        if (skills.dataVisualization && !prevLower.includes('dashboard') && !prevLower.includes('visualization')) {
-            return `This role involves creating dashboards and visualizations. What's your experience with tools like Excel, Tableau, Power BI, or similar visualization tools?`;
-        }
-
-        if (skills.sql && !prevLower.includes('sql') && !prevLower.includes('database')) {
-            return `The position involves working with databases. How comfortable are you with SQL, and have you written SQL queries before?`;
-        }
-
-        if (skills.python && !prevLower.includes('python')) {
-            return `This role mentions Python for data analysis. Do you have experience with Python, or is that something you're looking to develop?`;
-        }
-
-        if (skills.communication && !prevLower.includes('stakeholder') && !prevLower.includes('communication')) {
-            return `The role requires communicating insights to non-technical stakeholders. Can you describe your experience explaining technical concepts to business teams?`;
-        }
-
-        // Role-specific questions
-        if (roleType === 'dataRole') {
-            return `For a data-focused role like this, can you walk me through your process for analyzing a new dataset from start to finish?`;
-        }
-
-        if (roleType === 'adminRole') {
-            return `For an administrative role, can you describe how you've organized or improved a process or system in your previous experience?`;
-        }
-
-        return `Looking at the specific requirements of this role, what aspect of the work are you most excited about?`;
-    },
-
-    getBehavioralQuestion() {
-        const templates = this.behavioralQuestionTemplates();
-        const randomIndex = Math.floor(Math.random() * templates.length);
-        return templates[randomIndex];
-    },
-
-    generateTechnicalQuestion(userSkills, jobAnalysis) {
-        const library = this.technicalQuestionLibrary();
-        const jobSkills = jobAnalysis.skills;
-
-        // Ask about skills mentioned in both job and user profile
-        if (jobSkills.python && userSkills.hasPython) {
-            const questions = library.python;
-            return questions[Math.floor(Math.random() * questions.length)];
-        }
-
-        if (jobSkills.sql && userSkills.hasSQL) {
-            const questions = library.sql;
-            return questions[Math.floor(Math.random() * questions.length)];
-        }
-
-        if (jobSkills.excel && userSkills.hasExcel) {
-            const questions = library.excel;
-            return questions[Math.floor(Math.random() * questions.length)];
-        }
-
-        if (jobSkills.dataVisualization) {
-            const questions = library.dataVisualization;
-            return questions[Math.floor(Math.random() * questions.length)];
-        }
-
-        if (jobSkills.statistics) {
-            const questions = library.statistics;
-            return questions[Math.floor(Math.random() * questions.length)];
-        }
-
-        // If no specific match, ask about general problem-solving
-        return `Let's talk about your problem-solving approach. Walk me through how you would tackle a complex problem in your domain.`;
-    },
-
-    generateScenarioQuestion(jobAnalysis, userSkills) {
-        const roleType = jobAnalysis.roleType;
-        const templates = this.scenarioQuestionTemplates();
-
-        if (roleType === 'dataRole' && templates.dataRole) {
-            const questions = templates.dataRole;
-            return questions[Math.floor(Math.random() * questions.length)];
-        }
-
-        if (roleType === 'adminRole' && templates.adminRole) {
-            const questions = templates.adminRole;
-            return questions[Math.floor(Math.random() * questions.length)];
-        }
-
-        if (roleType === 'communicationRole' && templates.communicationRole) {
-            const questions = templates.communicationRole;
-            return questions[Math.floor(Math.random() * questions.length)];
-        }
-
-        // Generic scenario
-        return `Let me give you a workplace scenario. You're working on a task and discover something unexpected or a problem you didn't anticipate. How would you handle it?`;
-    },
-
-    generateContextualQuestion(responseIndex, prevAnswer) {
-        const context = this.state.interview.conversationContext;
-        const mode = this.state.interviewMode;
-        const field = this.state.user.field || 'your field';
-        const prevAnalysis = responseIndex > 0 ? this.state.interview.responses[responseIndex - 1]?.analysis : null;
-
-        // Stage 0: Opening - already asked
-        // Stage 1: Background/motivation based on response 0
-        if (responseIndex === 1) {
-            context.stage = 'background';
-            context.stagesCompleted.push('opening');
-
-            if (prevAnalysis?.extractedInfo?.hasProjectExperience) {
-                return `You mentioned working on projects. Can you walk me through one project you're particularly proud of and your specific role in it?`;
-            } else if (prevAnswer && (prevAnswer.toLowerCase().includes('school') || prevAnswer.toLowerCase().includes('university'))) {
-                return `You mentioned your academic background. Beyond coursework, can you describe a time when you applied what you learned in a practical or real-world situation?`;
-            } else {
-                return `What specifically drew you to ${field}, and can you describe one experience that really solidified that interest for you?`;
-            }
-        }
-
-        // Stage 2: Skills/Strengths - deepen understanding
-        if (responseIndex === 2) {
-            context.stage = 'skills';
-            context.stagesCompleted.push('background');
-
-            if (prevAnalysis?.extractedInfo?.skills?.length > 0) {
-                const skill = prevAnalysis.extractedInfo.skills[0];
-                return `You mentioned ${skill}. How did you develop expertise in that area, and can you give me a specific example of when you used it to make a meaningful impact?`;
-            } else {
-                return `Looking at your overall background, what would you say are your 2-3 core strengths, and can you give me an example of how you've applied each one?`;
-            }
-        }
-
-        // Stage 3: Behavioral/Teamwork
-        if (responseIndex === 3) {
-            context.stage = 'behavioral';
-            context.stagesCompleted.push('skills');
-
-            const hasTeamExperience = this.state.interview.responses.some(r =>
-                /team|collaborated|worked with|group|together/i.test(r.answer)
-            );
-
-            if (!hasTeamExperience) {
-                return `Tell me about a time when you had to work with others toward a common goal. How did you contribute to the team's success?`;
-            } else {
-                return `You mentioned working with teams. Tell me about a time when you disagreed with a teammate on the approach to something. How did you handle it?`;
-            }
-        }
-
-        // Stage 4: Pressure/Resilience/Growth
-        if (responseIndex === 4) {
-            context.stage = 'growth';
-            const hasChallengeAnswer = prevAnalysis?.hasChallenge;
-
-            if (hasChallengeAnswer) {
-                return `That's a good example of handling challenges. Now, tell me about a time when something didn't go as you expected. What did you learn from that experience?`;
-            } else {
-                return `Tell me about a time when you faced a significant challenge or setback. How did you work through it?`;
-            }
-        }
-
-        // Stage 5: Role-specific or Technical
-        if (responseIndex === 5) {
-            context.stage = 'roleSpecific';
-            context.stagesCompleted.push('growth');
-
-            if (mode === 'technical' || mode === 'case') {
-                return mode === 'technical' ?
-                    `Let's do a technical scenario. You encounter a problem you've never faced before. Walk me through how you'd approach diagnosing and solving it.`
-                    : `Here's a business scenario. You need to launch a new product feature but have limited resources. How would you approach this strategically?`;
-            } else {
-                return `Let me ask you a hypothetical. If you started here and encountered resistance to one of your ideas, how would you handle gaining buy-in?`;
-            }
-        }
-
-        // Stage 6: Closing/Questions for interviewer
-        if (responseIndex === 6) {
-            context.stage = 'closing';
-            context.stagesCompleted.push('roleSpecific');
-            return `Before we wrap up, do you have any questions for me about the role, the team, or the company?`;
-        }
-
-        // Fallback
-        return `Is there anything else you'd like me to know about you as a candidate?`;
-    },
-
-    generateAIAcknowledgment(answer) {
-        const name = this.state.user.name ? this.state.user.name.split(' ')[0] : '';
-        const words = answer.trim().split(/\s+/).length;
-        const hasExample = /(I |my |we |project|when |worked on|built|led |created|solved|implemented|experience)/i.test(answer);
-        const hasResult = /(result|outcome|achieved|improved|increased|reduced|saved|learned|realized|impact)/i.test(answer);
-
-        // Very short answer — inject a clarifying follow-up
-        if (words < 12) {
-            const followUps = [
-                "Could you walk me through a specific example of that?",
-                "I'd like to hear more — can you give me a concrete situation?",
-                "What's a real example from your experience where that came up?"
-            ];
-            return {
-                text: `I want to dig a little deeper on that${name ? `, ${name}` : ''}.`,
-                followUpQuestion: followUps[Math.floor(Math.random() * followUps.length)],
-                injectAsNextQuestion: true,
-                type: 'probe'
-            };
-        }
-
-        // Has example but missing results — ask about outcome
-        if (hasExample && !hasResult) {
-            const bridges = [
-                "That's helpful context. But what actually happened — what was the result?",
-                "Good example. I'm curious about the outcome — what changed or improved?",
-                "I see the situation. What was the impact of your actions?"
-            ];
-            const text = bridges[Math.floor(Math.random() * bridges.length)];
-            return { text, injectAsNextQuestion: false, type: 'bridge' };
-        }
-
-        // Good detailed answer — acknowledge genuinely and move on
-        const acks = [
-            "That's really clear. I can see you have solid experience there.",
-            "Solid — you've clearly thought about this.",
-            "Good answer. That tells me something important about how you approach things.",
-            "I like that. Shows real depth.",
-            `That's well said${name ? `, ${name}` : ''}. Moving on.`
-        ];
-        return {
-            text: acks[Math.floor(Math.random() * acks.length)],
-            injectAsNextQuestion: false,
-            type: 'acknowledge'
-        };
-    },
-
-    showAIBridge(ack, callback) {
-        const questionEl = document.getElementById('question-text');
-        const statusEl = document.getElementById('interviewer-status');
-        const pulseEl = document.getElementById('ai-pulse');
-        const nextBtn = document.getElementById('next-question-btn');
-
-        if (nextBtn) nextBtn.disabled = true;
-
-        // Show thinking state
-        if (statusEl) statusEl.textContent = 'Processing your response...';
-        if (pulseEl) { pulseEl.classList.remove('opacity-0'); pulseEl.classList.add('opacity-100'); }
-
-        setTimeout(() => {
-            // Show acknowledgment
-            if (questionEl) questionEl.textContent = `"${ack.text}"`;
-            if (statusEl) statusEl.textContent = ack.type === 'probe' ? 'Follow-up incoming' : 'Interviewer responded';
-            this.speak(ack.text, null, 0.96);
-
-            const pause = ack.type === 'acknowledge' ? 2500 : 3000;
-            setTimeout(() => {
-                if (pulseEl) pulseEl.classList.remove('opacity-100');
-                if (nextBtn) nextBtn.disabled = false;
-                callback();
-            }, pause);
-        }, 800);
-    },
-
-    generateNeuralFollowUp() {
-        const idx = this.state.interview.currentQuestionIndex;
-        const mode = this.state.interviewMode;
-        const name = this.state.user.name ? this.state.user.name.split(' ')[0] : 'there';
-        const prevAnswer = idx > 0 ? (this.state.interview.responses[idx - 1]?.answer || '') : '';
-        const structure = {
-            1: {
-                hr: `Interesting. You mentioned ${prevAnswer.substring(0, 30).toLowerCase().includes('experi') ? 'experience' : 'that'}. What specifically drew you to this kind of role, ${name}?`,
-                technical: `Great foundation. Given your background in ${this.state.user.field}, what technical challenge excites you most about this position?`,
-                case: `From a strategic lens — why are you interested in tackling the specific challenges this role involves?`,
-                rapid: `Quick one: in 20 seconds, what's your biggest motivation here?`,
-                friendly: `That's great context. What was the "spark" moment for you in ${this.state.user.field}?`
-            },
-            2: {
-                hr: "Now let's talk about teamwork. Describe a situation where you had to collaborate with someone challenging. How did you make it work?",
-                technical: "Tell me about a time you had to explain something technical to a non-technical person. How did you approach it?",
-                case: "Walk me through a time you had to convince someone skeptical. What was your approach?",
-                rapid: "Team conflict: relationship or deadline? Real example?",
-                friendly: "Tell me about a time you really helped a teammate. What did you do?"
-            },
-            3: {
-                hr: `You mentioned ${prevAnswer.substring(0, 20).toLowerCase()}. When have you shown that under real pressure?`,
-                technical: "Imagine you suddenly need to handle 10x more traffic. How would you approach redesigning the system?",
-                case: "A competitor launches a feature targeting your core users. Your 48-hour action plan?",
-                rapid: "Critical bug, 2 hours to deadline. What's your first move?",
-                friendly: "Tell me about a high-pressure moment. How did you handle it?"
-            },
-            4: {
-                hr: "Tell me about a significant setback. What did you learn from it?",
-                technical: "Describe the most complex technical challenge you've solved. Walk me through your process.",
-                case: "Budget cuts of 50% tomorrow. Which features survive and why?",
-                rapid: "Most creative solution you've built. 15 seconds.",
-                friendly: "What challenge tested your resilience the most? How'd you overcome it?"
-            },
-            5: {
-                hr: "What's one real weakness you're actively turning into a strength right now?",
-                technical: "How do you keep your technical skills sharp? What are you learning?",
-                case: "If you were interviewing for this role, what's the one question you'd ask?",
-                rapid: "One reason NOT to hire you that actually signals high potential?",
-                friendly: "What's one thing you're most excited to learn here?"
-            }
-        };
-        const q = structure[idx] ? (structure[idx][mode] || structure[idx]['hr']) : "What else would you like me to know about you?";
-        this.state.interview.questions.push(q);
-    },
-
-    generateNeuralFeedback(answer) {
-        if (!answer || answer.trim().length === 0) return null;
-
-        const words = answer.trim().split(/\s+/).length;
-        const hasExample = /(project|when|worked|built|led|created|solved|implemented|experience|situation|team|responsibility|managed|developed)/i.test(answer);
-        const hasResult = /(result|outcome|achieved|improved|increased|reduced|saved|impact|learned|growth|success)/i.test(answer);
-        const hasMetric = /(\d+%|\d+x|increased|improved|reduced|saved|\d+\s*(hours|days|weeks|months|dollars|percent|people|users|records))/i.test(answer);
-        const hasChallenge = /(challenge|difficult|struggled|overcome|hard|problem|issue|learned|mistake|failed|unexpected)/i.test(answer);
-        const isSTARFormat = hasExample && hasResult;
-        const lengthGood = words >= 40 && words <= 120;
-
-        // Realistic interviewer feedback
-        if (words < 12) {
-            return "That response was quite brief. In a real interview, aim to provide more context and detail about your example and what you learned.";
-        }
-        if (words < 25 && !hasExample) {
-            return "Your answer is a bit general. Try grounding it in a specific example or situation. Concrete stories are what interviewers remember.";
-        }
-        if (hasExample && !hasResult) {
-            return "Good that you provided an example. To strengthen this, also explain what the outcome was or what you took from it. That shows impact.";
-        }
-        if (hasExample && hasResult && !hasMetric) {
-            return "Solid response with a clear situation and outcome. If available, including specific numbers or metrics would make this even stronger.";
-        }
-        if (isSTARFormat && hasMetric && lengthGood) {
-            return "Strong answer. You clearly described the situation, your actions, and measurable results. That's exactly what interviewers look for.";
-        }
-        if (hasChallenge && hasResult && lengthGood) {
-            return "Excellent. You tackled a real challenge and explained what you learned. That demonstrates problem-solving and growth mindset.";
-        }
-        if (words > 180) {
-            return "You provided great detail, but in an interview, aim for 50–100 words. This keeps the conversation flowing and shows you can be concise.";
-        }
-        if (lengthGood && hasExample) {
-            return "That's a solid response. You gave enough context, were specific, and stayed concise. Good interviewing.";
-        }
-
-        return "You answered directly and provided relevant information. Good.";
-    },
-
-    isTechnicalField() {
-        const field = this.state.user.field.toLowerCase();
-        return ['computer', 'software', 'artificial', 'cybersecurity', 'cloud', 'devops', 'networking', 'systems', 'game', 'data', 'statistics', 'mathematics', 'physics', 'engineering', 'ux', 'design', 'architecture'].some(k => field.includes(k));
-    },
-
-    generateFinalReport() {
-        const container = document.getElementById('transcript-container');
-        if (container) {
-            container.innerHTML = this.state.interview.responses.map((r, i) => {
-                const feedback = r.feedback || "No transcription was captured for this response.";
-                const noResponse = !r.answer || r.answer === '(No response captured)' || r.answer.length < 5;
+        
+        if (el('rep-strengths')) el('rep-strengths').innerHTML = (s.strengths || []).map(str => `<li><i data-lucide="check" class="w-3.5 h-3.5 text-green-500 inline mr-1"></i> ${str}</li>`).join('');
+        if (el('rep-weaknesses')) el('rep-weaknesses').innerHTML = (s.weaknesses || []).map(w => `<li><i data-lucide="x" class="w-3.5 h-3.5 text-orange-400 inline mr-1"></i> ${w}</li>`).join('');
+        if (el('rep-action-plan')) el('rep-action-plan').innerHTML = (s.actionPlan || s.weaknesses || []).map(a => `<li class="flex gap-2 items-start"><i data-lucide="arrow-right-circle" class="w-4 h-4 text-brand-500 mt-0.5 shrink-0"></i> <span>${a}</span></li>`).join('');
+        
+        if (el('rep-best-answer')) el('rep-best-answer').textContent = s.bestAnswer ? `"${s.bestAnswer}"` : "N/A";
+        if (el('rep-worst-answer')) el('rep-worst-answer').textContent = s.weakestAnswer ? `"${s.weakestAnswer}"` : "N/A";
+        if (el('rep-star-example')) el('rep-star-example').textContent = s.starExample || "N/A";
+
+        const qReviewContainer = el('rep-q-review');
+        if (qReviewContainer && s.responses) {
+            qReviewContainer.innerHTML = s.responses.map((r, i) => {
+                const noResponse = !r.answer || r.answer.length < 5 || r.answer.includes("skipped");
                 return `
-                    <div class="bg-white rounded-xl p-5 border border-slate-100 shadow-soft space-y-4">
-                        <div class="flex justify-between items-center">
-                            <span class="text-[9px] font-black text-brand-500 uppercase tracking-widest">Q${i+1}</span>
-                            <i data-lucide="${noResponse ? 'alert-circle' : 'check-circle'}" class="w-4 h-4 ${noResponse ? 'text-slate-300' : 'text-[#63D5C4]'}"></i>
-                        </div>
-                        <p class="text-sm font-bold text-brand-900 tracking-tight leading-snug">"${r.question}"</p>
-                        <div class="bg-brand-50/50 p-4 rounded-lg ${noResponse ? 'italic text-slate-300' : 'text-slate-500 font-medium'} border-l-4 border-brand-500 text-xs leading-relaxed">
-                            ${noResponse ? 'No response was recorded.' : `"${r.answer}"`}
-                        </div>
-                        <div class="pt-3 border-t border-slate-100 flex items-start gap-3">
-                            <div class="w-7 h-7 bg-brand-900 text-[#63D5C4] rounded-lg flex items-center justify-center shrink-0">
-                                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
-                            </div>
-                            <div>
-                                <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Feedback</p>
-                                <p class="text-xs font-bold text-brand-900 leading-relaxed">${feedback}</p>
-                            </div>
+                    <div class="card space-y-3">
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Question ${i+1}</p>
+                        <p class="text-sm font-bold text-slate-800 leading-relaxed">${r.question}</p>
+                        <div class="bg-slate-50 p-4 rounded-xl border-l-4 ${noResponse ? 'border-orange-300 italic text-slate-400' : 'border-brand-500 text-slate-700'} text-sm leading-relaxed">
+                            ${noResponse ? 'Skipped or no response recorded.' : r.answer}
                         </div>
                     </div>
                 `;
             }).join('');
         }
 
-        // Analyze interview performance based on actual responses
-        const responses = this.state.interview.responses;
-        const allAnswers = responses.map(r => r.answer || '').join(' ');
-        const totalWords = allAnswers.split(/\s+/).length;
-        const avgWordsPerAnswer = Math.round(totalWords / (responses.length || 1));
-
-        // Count different characteristics
-        let exampleCount = 0;
-        let resultCount = 0;
-        let metricsCount = 0;
-        let challengeCount = 0;
-        let shortAnswersCount = 0;
-
-        responses.forEach(r => {
-            if (!r.answer || r.answer.length < 25) shortAnswersCount++;
-            if (/(project|worked|built|led|created|solved|implemented|situation)/i.test(r.answer)) exampleCount++;
-            if (/(result|outcome|achieved|improved|increased|reduced|impact|learned)/i.test(r.answer)) resultCount++;
-            if (/(\d+%|\d+x|increased|improved|reduced)/i.test(r.answer)) metricsCount++;
-            if (/(challenge|difficult|overcome|problem)/i.test(r.answer)) challengeCount++;
-        });
-
-        const strengths = [];
-        const weaknesses = [];
-
-        // Dynamic strengths
-        if (exampleCount >= responses.length * 0.7) {
-            strengths.push({ icon: 'shield-check', text: 'Used specific examples throughout' });
-        }
-        if (resultCount >= responses.length * 0.7) {
-            strengths.push({ icon: 'zap', text: 'Clearly articulated outcomes and impact' });
-        }
-        if (metricsCount >= responses.length * 0.5) {
-            strengths.push({ icon: 'trending-up', text: 'Included measurable results' });
-        }
-        if (challengeCount >= 2) {
-            strengths.push({ icon: 'award', text: 'Demonstrated growth through challenges' });
-        }
-        if (avgWordsPerAnswer >= 60) {
-            strengths.push({ icon: 'message-square', text: 'Gave thoughtful, detailed answers' });
-        }
-
-        // Dynamic weaknesses
-        if (shortAnswersCount >= 2) {
-            weaknesses.push({ icon: 'target', text: 'Some answers were too brief — expand with more detail next time' });
-        }
-        if (exampleCount < responses.length * 0.5) {
-            weaknesses.push({ icon: 'alert-circle', text: 'Use more specific, real examples from your experience' });
-        }
-        if (resultCount < responses.length * 0.5) {
-            weaknesses.push({ icon: 'trending-down', text: 'Always mention the outcome — what changed or what you learned?' });
-        }
-        if (metricsCount < 2) {
-            weaknesses.push({ icon: 'hash', text: 'Use metrics and numbers to quantify impact when possible' });
-        }
-
-        // Ensure at least one of each
-        if (strengths.length === 0) {
-            strengths.push({ icon: 'check-circle', text: 'Completed the full interview successfully' });
-        }
-        if (weaknesses.length === 0) {
-            weaknesses.push({ icon: 'lightbulb', text: 'Challenge yourself with more complex scenarios in practice' });
-        }
-
-        const strengthsEl = document.getElementById('report-strengths');
-        const weakEl = document.getElementById('report-weaknesses');
-
-        if (strengthsEl) {
-            strengthsEl.innerHTML = strengths.map(s => `<li class="flex gap-3 p-3.5 bg-white rounded-lg border border-slate-100 text-xs font-bold text-brand-900"><i data-lucide="${s.icon}" class="w-4 h-4 text-[#63D5C4] shrink-0"></i>${s.text}</li>`).join('');
-        }
-        if (weakEl) {
-            weakEl.innerHTML = weaknesses.map(w => `<li class="flex gap-3 p-3.5 bg-white rounded-lg border border-slate-100 text-xs font-bold text-brand-900"><i data-lucide="${w.icon}" class="w-4 h-4 text-[#A37BFF] shrink-0"></i>${w.text}</li>`).join('');
-        }
-
-        const continueText = document.getElementById('report-continue-text');
-        const continueIcon = document.getElementById('report-continue-icon');
-        if (this.isTechnicalField()) {
-            if (continueText) continueText.textContent = 'Unlock Practical Skills';
-            if (continueIcon) continueIcon.setAttribute('data-lucide', 'lock-open');
-        } else {
-            if (continueText) continueText.textContent = 'Go to Dashboard';
-            if (continueIcon) continueIcon.setAttribute('data-lucide', 'layout-dashboard');
-        }
         if (typeof lucide !== 'undefined') lucide.createIcons();
-    },
-
-    handleReportContinue() {
-        if (this.isTechnicalField()) { this.startPractice(); } else { this.showDashboard(); }
-    },
-
-    saveSession(score) {
-        this.state.sessions.unshift({
-            date: new Date().toLocaleDateString(),
-            mode: this.state.interviewMode,
-            score,
-            field: this.state.user.field
-        });
-        this.saveUserData();
-    },
-
-    // --- Practice ---
-    startPractice() {
-        const isTech = this.isTechnicalField();
-        const el = (id) => document.getElementById(id);
-        if (el('code-task')) el('code-task').classList.toggle('hidden', !isTech);
-        if (el('case-task')) el('case-task').classList.toggle('hidden', isTech);
-        if (el('task-type-badge')) el('task-type-badge').textContent = isTech ? 'Neural Logic Tuning' : 'Strategic Case';
-        if (el('task-title')) el('task-title').textContent = isTech ? 'Asynchronous Pattern Optimization' : 'Market Resilience Strategy';
-        if (el('code-desc')) el('code-desc').textContent = "Analyze and optimize the provided logic for O(log n) efficiency.";
-        if (el('case-desc')) el('case-desc').textContent = "How would you pivot a declining fitness app in a saturated high-growth market?";
-        this.goToStage(6);
-    },
-
-    submitPracticeTask() {
-        const el = (id) => document.getElementById(id);
-        if (el('task-feedback-container')) el('task-feedback-container').classList.remove('hidden');
-        if (el('task-feedback-text')) el('task-feedback-text').textContent = "Neural verification successful. Your logic shows significant structural integrity.";
     },
 
     // --- Dashboard ---
     showDashboard() {
         const el = (id) => document.getElementById(id);
-        const name = this.state.user.name || 'Guest User';
+        const name = this.state.user.name || 'Guest';
         const firstName = name.split(' ')[0];
 
-        // Header and profile info
-        if (el('dash-user-name')) el('dash-user-name').textContent = `Hi, ${firstName}!`;
-        if (el('dash-full-name')) el('dash-full-name').textContent = name;
-        if (el('dash-user-field')) el('dash-user-field').textContent = this.state.user.field || '';
-        if (el('user-initials-dash')) el('user-initials-dash').textContent = name.split(' ').map(n => n[0]).join('').toUpperCase();
+        if (el('dash-greeting')) el('dash-greeting').textContent = `Hi ${firstName} — let's get you interview-ready.`;
+        if (el('nav-user-avatar')) el('nav-user-avatar').textContent = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
 
-        // Skills tags
-        const tagsContainer = el('dash-skills-tags');
-        const noSkillsMsg = el('dash-no-skills');
-        if (tagsContainer && noSkillsMsg) {
-            const skills = (this.state.user.skills || '').split(',').map(s => s.trim()).filter(Boolean);
-            if (skills.length > 0) {
-                tagsContainer.innerHTML = skills.map(s => `<span class="inline-block px-2.5 py-1 bg-brand-50 text-brand-500 rounded-lg text-[8px] font-black uppercase tracking-wider border border-brand-100">${s}</span>`).join('');
-                noSkillsMsg.classList.add('hidden');
+        // Profile Completeness
+        let pct = 0;
+        let missing = [];
+        if (this.state.user.name) pct += 20; else missing.push('Name');
+        if (this.state.user.field) pct += 20;
+        if (this.state.user.skills) pct += 20; else missing.push('Skills');
+        if (this.state.user.courses) pct += 20;
+        if (this.state.user.experience) pct += 20; else missing.push('Projects');
+        
+        if (el('dash-profile-pct')) el('dash-profile-pct').textContent = `${pct}%`;
+        if (el('dash-profile-bar')) el('dash-profile-bar').style.width = `${pct}%`;
+        
+        if (el('dash-profile-missing')) {
+            if (missing.length === 0) {
+                el('dash-profile-missing').innerHTML = `<li class="flex items-center gap-2 text-green-600 font-bold uppercase text-[9px] tracking-widest"><i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Profile Complete</li>`;
             } else {
-                tagsContainer.innerHTML = '';
-                noSkillsMsg.classList.remove('hidden');
+                el('dash-profile-missing').innerHTML = missing.map(m => `<li class="flex items-center gap-2 text-slate-400 font-bold uppercase text-[9px] tracking-widest"><i data-lucide="x-circle" class="w-3.5 h-3.5"></i> ${m}</li>`).join('');
             }
         }
 
-        // Experience section
-        const expSection = el('dash-experience');
-        const expText = el('dash-experience-text');
-        if (expSection && expText) {
-            const exp = (this.state.user.experience || '').trim();
-            if (exp) {
-                expText.textContent = exp;
-                expSection.classList.remove('hidden');
-            } else {
-                expSection.classList.add('hidden');
+        // Readiness Score Card
+        const hasInterviews = this.state.sessions.length > 0;
+        if (!hasInterviews) {
+            if (el('dash-readiness-score')) el('dash-readiness-score').textContent = "--";
+            if (el('dash-readiness-score')) el('dash-readiness-score').className = "text-6xl font-black text-slate-200 tracking-tighter";
+            if (el('dash-readiness-desc')) el('dash-readiness-desc').textContent = "Complete an interview to unlock your score.";
+            if (el('dash-score-btn')) el('dash-score-btn').textContent = "Start interview";
+        } else {
+            const avgScore = Math.round(this.state.sessions.slice(0, 3).reduce((acc, s) => acc + s.score, 0) / Math.min(this.state.sessions.length, 3) * 10);
+            if (el('dash-readiness-score')) {
+                el('dash-readiness-score').textContent = avgScore;
+                el('dash-readiness-score').className = "text-6xl font-black text-brand-600 tracking-tighter";
+            }
+            if (el('dash-readiness-desc')) el('dash-readiness-desc').textContent = `Based on your last ${Math.min(this.state.sessions.length, 3)} sessions.`;
+            if (el('dash-score-btn')) el('dash-score-btn').textContent = "View reports";
+        }
+
+        // Focus Area Card
+        if (!hasInterviews) {
+            if (el('dash-focus-area-title')) el('dash-focus-area-title').textContent = "Focus Area";
+            if (el('dash-focus-area-desc')) el('dash-focus-area-desc').textContent = "Complete your first interview to see your focus areas.";
+            if (el('dash-focus-btn')) el('dash-focus-btn').textContent = "Practice this";
+        } else {
+            const latest = this.state.sessions[0];
+            if (latest.weaknesses && latest.weaknesses.length > 0) {
+                if (el('dash-focus-area-title')) el('dash-focus-area-title').textContent = latest.weaknesses[0];
+                if (el('dash-focus-area-desc')) el('dash-focus-area-desc').textContent = "Work on this specific area to improve your overall readiness score.";
+                if (el('dash-focus-btn')) el('dash-focus-btn').textContent = "Practice this";
             }
         }
 
-        // LinkedIn link
-        const linkedinLink = el('dash-linkedin-link');
-        const linkedinText = el('dash-linkedin-text');
-        if (linkedinLink) {
-            const url = this.state.user.linkedin || '';
-            if (url) {
-                linkedinLink.href = url.startsWith('http') ? url : `https://${url}`;
-                if (linkedinText) {
-                    try { linkedinText.textContent = new URL(linkedinLink.href).hostname; }
-                    catch { linkedinText.textContent = 'LinkedIn Profile'; }
-                }
-                linkedinLink.classList.remove('hidden');
-                linkedinLink.classList.add('flex');
-            } else {
-                linkedinLink.classList.add('hidden');
-                linkedinLink.classList.remove('flex');
+        // Recommended Next Session Card
+        if (!hasInterviews) {
+            if (el('dash-session-suggestion-title')) el('dash-session-suggestion-title').textContent = "Start an Interview";
+            if (el('dash-session-suggestion-desc')) el('dash-session-suggestion-desc').textContent = "Start a general practice session to get your baseline score.";
+            if (el('dash-suggestion-btn')) el('dash-suggestion-btn').textContent = "Start now";
+        } else {
+            const latest = this.state.sessions[0];
+            let nextMode = 'technical';
+            let recommendation = 'Technical Round';
+            let reason = 'Based on your field, a technical deep-dive is recommended.';
+            
+            if (latest.mode === 'technical') {
+                nextMode = 'hr';
+                recommendation = 'Behavioral Round';
+                reason = 'You recently did a technical round. Let\'s polish your behavioral answers.';
+            } else if (latest.mode === 'hr') {
+                nextMode = 'project';
+                recommendation = 'Project Deep-Dive';
+                reason = 'Time to drill down into the specifics of your past projects.';
             }
+
+            if (el('dash-session-suggestion-title')) el('dash-session-suggestion-title').textContent = "Start an Interview";
+            if (el('dash-session-suggestion-desc')) el('dash-session-suggestion-desc').textContent = `Recommended: ${recommendation}. ${reason}`;
+            if (el('dash-suggestion-btn')) el('dash-suggestion-btn').textContent = "Start session";
+            if (el('dash-suggestion-btn')) el('dash-suggestion-btn').onclick = () => {
+                this.state.wizard.style = nextMode;
+                this.goToStage(3);
+            };
         }
 
-        // Session history
-        const list = el('session-history-list');
-        const emptyCTA = el('dash-session-empty-cta');
-        if (list) {
-            if (this.state.sessions.length > 0) {
-                if (emptyCTA) emptyCTA.classList.add('hidden');
-                list.classList.remove('hidden');
-                list.innerHTML = this.state.sessions.map(s => `
-                    <div class="p-4 bg-slate-50 rounded-lg hover:bg-white hover:shadow-soft transition-all cursor-pointer border border-transparent hover:border-slate-100">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-3 min-w-0">
-                                <div class="w-8 h-8 bg-brand-900 text-[#63D5C4] rounded-lg flex items-center justify-center shrink-0">
-                                    <i data-lucide="award" class="w-3.5 h-3.5"></i>
-                                </div>
-                                <div class="min-w-0 flex-1">
-                                    <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">${s.date} &bull; ${s.mode}</p>
-                                    <p class="text-xs font-bold text-brand-900 truncate">${s.field}</p>
-                                </div>
+        // Recent Interview
+        if (hasInterviews) {
+            const latest = this.state.sessions[0];
+            if (el('dash-recent-interview')) el('dash-recent-interview').classList.remove('hidden');
+            if (el('dash-recent-interview')) el('dash-recent-interview').classList.add('flex');
+            if (el('dash-no-recent')) el('dash-no-recent').classList.add('hidden');
+            
+            if (el('dash-recent-type')) el('dash-recent-type').textContent = latest.mode;
+            if (el('dash-recent-date')) el('dash-recent-date').textContent = latest.date;
+            if (el('dash-recent-job')) el('dash-recent-job').textContent = latest.field;
+            if (el('dash-recent-score')) el('dash-recent-score').textContent = `${latest.score}/10`;
+        } else {
+            if (el('dash-recent-interview')) {
+                el('dash-recent-interview').classList.add('hidden');
+                el('dash-recent-interview').classList.remove('flex');
+            }
+            if (el('dash-no-recent')) el('dash-no-recent').classList.remove('hidden');
+        }
+
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+        this.goToStage(1);
+    },
+
+    // --- History ---
+    showHistory() {
+        const list = document.getElementById('history-list');
+        if (!list) return;
+
+        if (this.state.sessions.length > 0) {
+            list.innerHTML = this.state.sessions.map((s, i) => `
+                <div class="group p-6 bg-white rounded-3xl shadow-soft border border-slate-100 hover:border-brand-200 transition-all cursor-default relative">
+                    <button onclick="window.app.deleteSession(${i})" class="absolute top-4 right-4 w-8 h-8 bg-white border border-slate-100 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all" title="Delete Session">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                    <div class="flex items-center justify-between mb-4 mr-6">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 bg-brand-50 text-brand-600 rounded-2xl flex items-center justify-center shrink-0">
+                                <i data-lucide="message-square" class="w-6 h-6"></i>
                             </div>
-                            <div class="text-right shrink-0 ml-2">
-                                <p class="text-lg font-black text-brand-500">${s.score}%</p>
-                                <p class="text-[8px] font-black text-[#63D5C4] uppercase tracking-widest">Match</p>
+                            <div>
+                                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">${s.date} &bull; ${s.mode}</p>
+                                <p class="text-base font-black text-brand-900">${s.field}</p>
                             </div>
                         </div>
+                        <div class="flex items-center gap-6">
+                            <div class="text-right">
+                                <p class="text-2xl font-black text-brand-500">${s.score}<span class="text-sm opacity-40">/10</span></p>
+                                <p class="text-[9px] font-black text-slate-300 uppercase tracking-widest">Score</p>
+                            </div>
+                            <button onclick="window.app.loadSessionReport(${i})" class="btn-primary py-2.5 px-6 text-[10px] uppercase tracking-widest rounded-xl shadow-lg">View Report</button>
+                        </div>
                     </div>
-                `).join('');
-            } else {
-                list.innerHTML = '';
-                list.classList.add('hidden');
-                if (emptyCTA) emptyCTA.classList.remove('hidden');
-            }
+                    <div class="grid grid-cols-2 gap-6 border-t border-slate-50 pt-6">
+                        <div>
+                            <p class="text-[9px] font-bold text-green-600 uppercase tracking-[0.2em] mb-2 flex items-center gap-1"><i data-lucide="arrow-up-circle" class="w-3 h-3"></i> Top Strength</p>
+                            <p class="text-xs text-slate-500 font-medium">${s.strengths && s.strengths.length > 0 ? s.strengths[0] : 'N/A'}</p>
+                        </div>
+                        <div>
+                            <p class="text-[9px] font-bold text-orange-500 uppercase tracking-[0.2em] mb-2 flex items-center gap-1"><i data-lucide="alert-triangle" class="w-3 h-3"></i> Top Focus Area</p>
+                            <p class="text-xs text-slate-500 font-medium">${s.weaknesses && s.weaknesses.length > 0 ? s.weaknesses[0] : 'N/A'}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            list.innerHTML = `
+                <div class="p-8 text-center bg-slate-50 rounded-2xl border border-slate-100">
+                    <i data-lucide="ghost" class="w-12 h-12 text-slate-300 mx-auto mb-3"></i>
+                    <p class="text-slate-500 font-medium">No interviews completed yet.</p>
+                </div>
+            `;
         }
-        this.goToStage(7);
         if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
+
+    deleteSession(index) {
+        if (!confirm("Are you sure you want to delete this session? This action cannot be undone.")) return;
+        
+        this.state.sessions.splice(index, 1);
+        this.saveUserData();
+        this.showHistory();
+        
+        // Show a brief status message if possible
+        const statusEl = document.getElementById('history-status');
+        if (statusEl) {
+            statusEl.textContent = 'Session deleted.';
+            statusEl.classList.remove('hidden');
+            setTimeout(() => statusEl.classList.add('hidden'), 3000);
+        }
     },
 
     // --- Live Speech Transcription ---
@@ -2408,76 +2538,52 @@ window.app = {
     },
 
     updateTranscriptDisplay() {
-        const placeholder = document.getElementById('transcript-placeholder');
-        const liveDiv = document.getElementById('transcript-live');
-        const finalEl = document.getElementById('final-transcript-text');
-        const interimEl = document.getElementById('interim-transcript-text');
-        const cursor = document.getElementById('transcript-cursor');
+        const editArea = document.getElementById('int-answer-area');
 
         const hasFinal = !!this.state.transcriptState.final;
         const hasInterim = !!this.state.transcriptState.interim;
 
-        if (placeholder) placeholder.classList.toggle('hidden', hasFinal || hasInterim);
-        if (liveDiv) liveDiv.classList.toggle('hidden', !hasFinal && !hasInterim);
-        if (finalEl) finalEl.textContent = this.state.transcriptState.final;
-        if (interimEl) interimEl.textContent = this.state.transcriptState.interim;
-        if (cursor) cursor.classList.toggle('hidden', !this.state.interview.isListening);
+        if (editArea && (hasFinal || hasInterim)) {
+            editArea.value = this.state.transcriptState.final + this.state.transcriptState.interim;
+            editArea.scrollTop = editArea.scrollHeight;
+        }
     },
 
     setMicState(state) {
         const dot = document.getElementById('mic-state-dot');
         const label = document.getElementById('mic-state-label');
         const wave = document.getElementById('mic-wave');
-        const micBtn = document.getElementById('mic-toggle-btn');
-        const micLabel = document.getElementById('mic-btn-label');
+        const micBtn = document.getElementById('int-mic-btn');
+        const micLabel = document.getElementById('int-mic-label');
         const statusEl = document.getElementById('interviewer-status');
-        const cursor = document.getElementById('transcript-cursor');
 
         const cfg = {
-            idle:       { dot: 'bg-slate-200',              label: 'Waiting for your response',    wave: false, btnCls: 'border-slate-100 bg-white text-brand-900',   btnLabel: 'Speak',      status: 'Your turn — tap Speak to respond' },
-            listening:  { dot: 'bg-red-400 animate-pulse',  label: 'Listening — speak now',        wave: true,  btnCls: 'border-red-300 bg-red-50 text-red-600',       btnLabel: 'Stop',       status: 'Listening...' },
-            processing: { dot: 'bg-yellow-400',             label: 'Processing speech...',         wave: false, btnCls: 'border-slate-100 bg-white text-slate-400',    btnLabel: 'Speak',      status: 'Processing...' },
-            done:       { dot: 'bg-[#63D5C4]',              label: 'Response captured ✓',          wave: false, btnCls: 'border-slate-100 bg-white text-brand-900',    btnLabel: 'Re-record',  status: 'Response captured' },
-            denied:     { dot: 'bg-orange-400',             label: 'Microphone access denied',     wave: false, btnCls: 'border-orange-200 bg-white text-orange-400',  btnLabel: 'Type instead', status: 'Microphone unavailable — type below' },
-            error:      { dot: 'bg-orange-400',             label: 'Recognition error — try again',wave: false, btnCls: 'border-orange-200 bg-white text-orange-400',  btnLabel: 'Retry',      status: 'Recognition error' }
+            idle:       { btnCls: 'bg-white text-slate-600 border-slate-200',   btnLabel: 'Dictate',      status: 'Your turn — type or dictate your response' },
+            listening:  { btnCls: 'bg-red-50 text-red-600 border-red-200',       btnLabel: 'Listening...',       status: 'Listening...' },
+            processing: { btnCls: 'bg-white text-slate-400 border-slate-100',    btnLabel: 'Dictate',      status: 'Processing...' },
+            done:       { btnCls: 'bg-white text-slate-600 border-slate-200',    btnLabel: 'Dictate',  status: 'Response captured' },
+            denied:     { btnCls: 'bg-orange-50 text-orange-600 border-orange-200',  btnLabel: 'Mic Denied', status: 'Microphone unavailable — type below' },
+            error:      { btnCls: 'bg-orange-50 text-orange-600 border-orange-200',  btnLabel: 'Error - Retry',      status: 'Recognition error' }
         };
 
         const s = cfg[state] || cfg.idle;
-        if (dot) dot.className = `w-2.5 h-2.5 rounded-full transition-all duration-300 shrink-0 ${s.dot}`;
-        if (label) label.textContent = s.label;
-        if (wave) wave.classList.toggle('hidden', !s.wave);
         if (micBtn) {
-            const base = 'flex items-center justify-center gap-3 py-6 px-8 rounded-3xl border-2 font-black transition-all text-sm uppercase tracking-widest min-w-[140px]';
-            micBtn.className = `${base} ${s.btnCls}`;
+            micBtn.className = `flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 text-sm rounded-lg border-2 transition-colors ${s.btnCls}`;
         }
         if (micLabel) micLabel.textContent = s.btnLabel;
         if (statusEl) statusEl.textContent = s.status;
-        if (cursor) cursor.classList.toggle('hidden', state !== 'listening');
     },
 
     resetTranscriptState() {
         this.state.transcriptState = { final: '', interim: '', isEditing: false };
 
-        const el = (id) => document.getElementById(id);
-        if (el('transcript-placeholder')) el('transcript-placeholder').classList.remove('hidden');
-        if (el('transcript-live')) el('transcript-live').classList.add('hidden');
-        if (el('final-transcript-text')) el('final-transcript-text').textContent = '';
-        if (el('interim-transcript-text')) el('interim-transcript-text').textContent = '';
-        if (el('transcript-cursor')) el('transcript-cursor').classList.add('hidden');
-        if (el('transcript-actions')) el('transcript-actions').classList.add('hidden');
-        if (el('transcript-edit-area')) { el('transcript-edit-area').classList.add('hidden'); el('transcript-edit-area').value = ''; }
-        if (el('transcript-live')) el('transcript-live').classList.add('hidden');
-
-        const editBtn = el('edit-transcript-btn');
-        if (editBtn) editBtn.innerHTML = '<i data-lucide="pencil" class="w-3.5 h-3.5"></i> Edit';
+        const editArea = document.getElementById('int-answer-area');
+        if (editArea) { editArea.value = ''; }
     },
 
     getTranscribedAnswer() {
-        if (this.state.transcriptState.isEditing) {
-            const editArea = document.getElementById('transcript-edit-area');
-            return editArea ? editArea.value.trim() : '';
-        }
-        return this.state.transcriptState.final.trim();
+        const editArea = document.getElementById('int-answer-area');
+        return editArea ? editArea.value.trim() : '';
     },
 
     toggleListening() {
