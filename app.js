@@ -1177,7 +1177,14 @@ window.app = {
         }
     },
 
+    showDashboard() {
+        this.goToStage(1);
+    },
+
     goToStage(stageNum) {
+        if (stageNum === 1) {
+            this._updateDashboardUI();
+        }
         if (stageNum === 3) {
             this.state.wizard.step = 1;
             this.renderWizardStep();
@@ -2315,7 +2322,7 @@ window.app = {
     },
 
     // --- Dashboard ---
-    showDashboard() {
+    _updateDashboardUI() {
         const el = (id) => document.getElementById(id);
         const name = this.state.user.name || 'Guest';
         const firstName = name.split(' ')[0];
@@ -2424,7 +2431,6 @@ window.app = {
         }
 
         if (typeof lucide !== 'undefined') lucide.createIcons();
-        this.goToStage(1);
     },
 
     // --- History ---
